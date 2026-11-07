@@ -1,0 +1,31 @@
+{
+  "name": "@croxton/buttery",
+  "version": "1.0.0",
+  "description": "Lightweight, performance-focused scroll animation library using native scroll timelines with a JS fallback",
+  "type": "module",
+  "files": [
+    "dist",
+    "lib"
+  ],
+  "main": "./dist/buttery.cjs",
+  "module": "./dist/buttery.js",
+  "unpkg": "./dist/buttery.min.js",
+  "jsdelivr": "./dist/buttery.min.js",
+  "exports": {
+    ".": {
+      "import": "./dist/buttery.js",
+      "require": "./dist/buttery.cjs"
+    }
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "vite build && vite build --mode browser"
+  },
+  "dependencies": {
+    "eases": "^1.0.8",
+    "parse-unit": "^1.0.1"
+  },
+  "devDependencies": {
+    "vite": "^8.3.6"
+  }
+}
