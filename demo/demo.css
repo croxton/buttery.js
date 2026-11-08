@@ -58,7 +58,9 @@ pre {
 .caption {
   position: relative;
   z-index: 2;
-  max-width: 34rem;
+  /* min-width: 0 lets flex/grid shrink the panel; long code then scrolls inside it */
+  min-width: 0;
+  max-width: min(34rem, 100%);
   padding: 20px;
   border-radius: 16px;
   background: var(--card);
@@ -226,7 +228,7 @@ pre {
 }
 
 @media (max-width: 700px) {
-  .balloon { grid-template-columns: 1fr; }
+  .balloon { grid-template-columns: minmax(0, 1fr); }
   .balloon__cow { max-width: 300px; }
   .layers__back  { left: 45%; }
   .layers__front { left: 5%; }
