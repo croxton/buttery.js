@@ -1,6 +1,6 @@
 {
   "name": "@croxton/buttery",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Lightweight, performance-focused scroll animation library using native scroll timelines with a JS fallback",
   "type": "module",
   "files": [
