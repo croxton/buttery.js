@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Buttery.js demo</title>
+  <meta name="description" content="Scroll-driven animations with native ScrollTimeline and a JavaScript fallback.">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="demo.css">
+</head>
+<body>
+
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+    <symbol id="cloud" viewBox="0 0 200 100">
+      <circle cx="60" cy="62" r="34"/>
+      <circle cx="100" cy="45" r="42"/>
+      <circle cx="145" cy="62" r="32"/>
+      <rect x="40" y="62" width="125" height="34" rx="17"/>
+    </symbol>
+  </svg>
+
+  <a class="badge" id="badge" href="?js">Checking…</a>
+
+  <!-- 1. Sky with parallax clouds -->
+  <header class="scene sky" id="sky">
+    <div class="clouds clouds--far mover" data-depth="far">
+      <svg style="--x:8%;--y:18%;--w:140px"><use href="#cloud"/></svg>
+      <svg style="--x:62%;--y:12%;--w:110px"><use href="#cloud"/></svg>
+      <svg style="--x:82%;--y:48%;--w:130px"><use href="#cloud"/></svg>
+    </div>
+    <div class="clouds clouds--mid mover" data-depth="mid">
+      <svg style="--x:-4%;--y:55%;--w:220px"><use href="#cloud"/></svg>
+      <svg style="--x:70%;--y:28%;--w:200px"><use href="#cloud"/></svg>
+    </div>
+    <div class="clouds clouds--near mover" data-depth="near">
+      <svg style="--x:20%;--y:75%;--w:320px"><use href="#cloud"/></svg>
+      <svg style="--x:78%;--y:80%;--w:280px"><use href="#cloud"/></svg>
+    </div>
+
+    <div class="sky__content">
+      <h1>Buttery.js</h1>
+      <p class="lead">Smooth scroll animations. Native <code>ScrollTimeline</code> when the browser has it, a tiny JavaScript fallback when it doesn't.</p>
+      <p class="hint">Scroll down ↓</p>
+    </div>
+  </header>
+
+  <!-- 2. Rocket cow -->
+  <section class="scene rocket" id="rocket">
+    <img class="rocket__cow mover" src="img/rocket-cow.webp" width="900" height="900" alt="Bessie the cow riding a rocket">
+    <div class="caption">
+      <h2>Bessie</h2>
+      <p>Moves diagonally and turns as the section scrolls past, with a <code>quadIn</code> ease.</p>
+<pre><code>buttery.create({
+  elem: section,
+  direct: cow,
+  from: 'top-bottom',
+  to: 'bottom-top',
+  props: {
+    '--tx':  { from: '-45vw', to: '45vw', timing: 'quadIn' },
+    '--ty':  { from: '40vh',  to: '-60vh', timing: 'quadIn' },
+    '--rot': { from: '-10deg', to: '15deg' }
+  }
+}).start()</code></pre>
+    </div>
+  </section>
+
+  <!-- 3. Balloon cow -->
+  <section class="scene balloon" id="balloon">
+    <div class="caption">
+      <h2>Daisy</h2>
+      <p>Uses a <code>via</code> midpoint: it rises, then sinks back down, swaying as it goes.</p>
+<pre><code>props: {
+  '--ty':  { from: '120px', via: '-160px', to: '60px', timing: 'sineInOut' },
+  '--rot': { from: '-6deg', via: '6deg', to: '-4deg', timing: 'sineInOut' }
+}</code></pre>
+    </div>
+    <img class="balloon__cow mover" src="img/floating-cow.webp" width="900" height="900" alt="Daisy the cow, startled, tied to a yellow balloon">
+  </section>
+
+  <!-- 4. Layered parallax -->
+  <section class="scene layers" id="layers">
+    <div class="layers__stage">
+      <img class="layers__back mover" src="img/floating-cow-behind.webp" width="900" height="900" alt="Gertie the cow floating away under a balloon, seen from behind">
+      <img class="layers__front mover" src="img/floating-cow-tail.webp" width="500" height="906" alt="Lulu the cow hanging from a balloon tied to her tail">
+      <div class="caption caption--overlay">
+        <h2>Gertie &amp; Lulu</h2>
+        <p>Two layers at different speeds. Lulu, in front, fades in by <code>'50%-40%'</code>: when the middle of the section reaches 40% down the viewport.</p>
+<pre><code>// front layer opacity
+from: 'top-bottom',
+to: '50%-40%',
+props: { opacity: { from: 0, to: 1 } }</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Meadow -->
+  <footer class="scene meadow" id="meadow">
+    <div class="meadow__content">
+      <h2>Buttercup</h2>
+      <p>She's not a fan of heights.</p>
+      <p><a href="https://github.com/croxton/buttery.js">View on GitHub</a></p>
+    </div>
+    <div class="landscape mountains--far mover">
+      <svg viewBox="0 0 1200 300" preserveAspectRatio="none" aria-hidden="true">
+        <path fill="#aac3d9" d="M0 300L0 170L90 110L160 150L260 60L340 130L420 90L520 160L610 70L700 140L790 100L880 170L980 50L1060 120L1130 90L1200 140L1200 300Z"/>
+      </svg>
+    </div>
+    <div class="landscape mountains--near mover">
+      <svg viewBox="0 0 1200 300" preserveAspectRatio="none" aria-hidden="true">
+        <path fill="#6f879c" d="M0 300L0 200L120 120L200 170L310 80L420 190L520 130L600 170L720 60L840 180L930 140L1040 90L1130 160L1200 130L1200 300Z"/>
+        <path fill="#f4f8fb" d="M285 100L310 80L337 107L323 101L311 112L297 101Z M692 86L720 60L748 88L733 82L720 94L706 84Z M1010 104L1040 90L1068 112L1052 104L1040 113L1026 102Z"/>
+      </svg>
+    </div>
+    <div class="landscape fields--back mover">
+      <svg viewBox="0 0 1200 300" preserveAspectRatio="none" aria-hidden="true">
+        <path fill="#b3d88a" d="M0 300L0 140C200 80 400 90 600 130C800 170 1000 90 1200 110L1200 300Z"/>
+      </svg>
+    </div>
+    <div class="landscape fields--front mover">
+      <svg viewBox="0 0 1200 300" preserveAspectRatio="none" aria-hidden="true">
+        <path fill="#8fca6a" d="M0 300L0 120C250 170 450 60 700 100C900 130 1050 80 1200 120L1200 300Z"/>
+      </svg>
+    </div>
+    <div class="grass grass--back mover"></div>
+    <div class="grass grass--mid mover"></div>
+    <img class="meadow__cow mover" src="img/standing-cow.webp" width="800" height="1057" alt="Buttercup, a wide-eyed brown and white cow, standing in the grass">
+    <div class="grass grass--front mover"></div>
+  </footer>
+
+  <script src="../dist/buttery.min.js"></script>
+  <script src="demo.js"></script>
+</body>
+</html>

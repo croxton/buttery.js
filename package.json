@@ -19,7 +19,8 @@
   },
   "sideEffects": false,
   "scripts": {
-    "build": "vite build && vite build --mode browser"
+    "build": "vite build && vite build --mode browser",
+    "demo": "vite --open /demo/"
   },
   "dependencies": {
     "eases": "^1.0.8",

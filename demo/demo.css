@@ -1,0 +1,234 @@
+/* Register the animated custom properties ourselves (see README: Custom properties and @property) */
+@property --tx    { syntax: "<length-percentage>"; inherits: false; initial-value: 0px; }
+@property --ty    { syntax: "<length-percentage>"; inherits: false; initial-value: 0px; }
+@property --rot   { syntax: "<angle>";             inherits: false; initial-value: 0deg; }
+@property --scale { syntax: "<number>";            inherits: false; initial-value: 1; }
+
+:root {
+  --sky-top: #6ec3f4;
+  --sky-bottom: #d9f0ff;
+  --meadow: #7cc36b;
+  --ink: #1d2b36;
+  --muted: #4a5b68;
+  --card: rgb(255 255 255 / 0.82);
+  --code-bg: #1d2b36;
+  --code-ink: #e6f1f8;
+  font-family: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+}
+
+* { box-sizing: border-box; }
+
+/* Sky shows when overscrolling at the top, grass at the bottom */
+html { background: linear-gradient(to bottom, var(--sky-top) 50%, #79c96a 50%); }
+
+body {
+  margin: 0;
+  overflow-x: clip;
+  background: linear-gradient(to bottom, var(--sky-top) 0%, var(--sky-bottom) 100%);
+  line-height: 1.5;
+}
+
+h1, h2 { line-height: 1.1; margin: 0 0 0.5em; }
+h1 { font-size: clamp(3rem, 12vw, 7rem); letter-spacing: -0.03em; }
+h2 { font-size: clamp(1.6rem, 5vw, 2.4rem); }
+p { margin: 0 0 1em; }
+code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9em; }
+a { color: inherit; }
+
+pre {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  overflow-x: auto;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+/* Everything that moves. No transitions here: they fight scroll-driven values. */
+.mover {
+  transform: translate3d(var(--tx), var(--ty), 0) rotate(var(--rot)) scale(var(--scale));
+  will-change: transform;
+}
+
+.scene { position: relative; overflow: clip; }
+
+.caption {
+  position: relative;
+  z-index: 2;
+  max-width: 34rem;
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--card);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.caption p { color: var(--muted); }
+
+/* Mode badge */
+.badge {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-size: 0.8rem;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.15);
+}
+.badge::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--dot, #aaa);
+}
+.badge[data-mode="native"] { --dot: #5ee07a; }
+.badge[data-mode="js"]     { --dot: #ffc940; }
+.badge[data-mode="off"]    { --dot: #ff7a6b; }
+
+/* 1. Sky */
+.sky {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: 80px 16px;
+  text-align: center;
+}
+.sky__content { position: relative; z-index: 2; max-width: 40rem; }
+.lead { font-size: clamp(1.05rem, 2.6vw, 1.35rem); }
+.hint { color: var(--muted); margin-top: 2em; }
+
+.clouds { position: absolute; inset: 0; pointer-events: none; }
+.clouds svg {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--w);
+  height: calc(var(--w) / 2);
+  fill: #fff;
+}
+.clouds--far  { opacity: 0.55; }
+.clouds--mid  { opacity: 0.8; }
+.clouds--near { z-index: 3; }
+
+/* 2. Rocket */
+.rocket {
+  min-height: 180vh;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 0 16px 20vh;
+}
+.rocket__cow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(420px, 70vw);
+  height: auto;
+  margin: calc(min(420px, 70vw) / -2) 0 0 calc(min(420px, 70vw) / -2);
+  z-index: 1;
+}
+
+/* 3. Balloon */
+.balloon {
+  min-height: 140vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 32px;
+  padding: 10vh max(16px, 5vw);
+}
+.balloon__cow { width: 100%; max-width: 480px; height: auto; justify-self: center; }
+
+/* 4. Layers */
+.layers { height: 260vh; }
+.layers__stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  display: grid;
+  place-items: end start;
+  padding: 0 16px 6vh;
+}
+.layers__back,
+.layers__front {
+  position: absolute;
+  height: auto;
+}
+.layers__back  { left: 50%; top: 10%; width: min(300px, 45vw); }
+.layers__front { left: 15%; top: 18%; width: min(260px, 38vw); z-index: 2; opacity: 0; }
+
+/* 5. Meadow */
+.meadow {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: grid;
+  place-items: start center;
+  padding: 14vh 16px 0;
+  text-align: center;
+}
+.meadow__content { position: relative; z-index: 9; max-width: 32rem; }
+.meadow__content p { color: var(--muted); }
+
+/* Back to front: mountains, fields, then grass. Every layer reaches the bottom
+   edge, so moving a layer down never leaves a gap. */
+.landscape,
+.grass {
+  position: absolute;
+  left: -2%;
+  right: -2%;
+  bottom: 0;
+  pointer-events: none;
+}
+.landscape svg { display: block; width: 100%; height: 100%; }
+
+/* The mountains start raised (negative --ty), so each one carries a solid
+   30vh skirt below the edge of the footer to avoid a gap underneath. */
+.mountains--far,
+.mountains--near {
+  bottom: -30vh;
+  padding-bottom: 30vh;
+  background: linear-gradient(to top, var(--skirt) 30vh, transparent 30vh);
+}
+.mountains--far  { --skirt: #aac3d9; height: calc(max(42vh, 220px) + 30vh); z-index: 1; opacity: 0.9; }
+.mountains--near { --skirt: #6f879c; height: calc(max(32vh, 170px) + 30vh); z-index: 2; }
+.fields--back    { height: max(22vh, 120px); z-index: 3; }
+.fields--front   { height: max(15vh, 90px);  z-index: 4; }
+
+.grass {
+  background-repeat: repeat-x;
+  background-position: bottom left;
+}
+.grass--back  { height: 130px; z-index: 5; background-size: 150px 130px; filter: brightness(0.9); }
+.grass--mid   { height: 100px; z-index: 6; background-size: 120px 100px; }
+.grass--front { height: 75px;  z-index: 8; background-size: 95px 75px; filter: brightness(1.08); }
+
+/* Big cow standing in the grass, rear end cropped by the left edge of the screen */
+.meadow__cow {
+  position: absolute;
+  z-index: 7;
+  bottom: -6%;
+  left: 0;
+  height: min(80vh, 125vw);
+  width: auto;
+  margin-left: calc(min(80vh, 125vw) * -0.28);
+  pointer-events: none;
+}
+
+@media (max-width: 700px) {
+  .balloon { grid-template-columns: 1fr; }
+  .balloon__cow { max-width: 300px; }
+  .layers__back  { left: 45%; }
+  .layers__front { left: 5%; }
+  pre { font-size: 0.72rem; }
+}

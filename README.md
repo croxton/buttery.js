@@ -17,6 +17,7 @@ When the browser supports it, the library uses native **scroll-driven animations
 - [Rendering modes](#rendering-modes)
 - [Custom properties and `@property`](#custom-properties-and-property)
 - [iOS Safari](#ios-safari)
+- [Demo](#demo)
 - [Tips](#tips)
 
 ## What's different from the original
@@ -279,7 +280,17 @@ Vite builds `lib/buttery.js` twice (see `vite.config.js`):
 | `dist/buttery.cjs` | `require()` | left as requires |
 | `dist/buttery.min.js` | `<script>` tag / CDN, `window.buttery` | bundled, minified |
 
-`test/index.html` is a small page for checking the script-tag build (`npx vite`, then open `/test/`).
+## Demo
+
+[Live demo](https://croxton.github.io/buttery.js/demo/)
+
+`demo/` is a static page that uses the script-tag build (`dist/buttery.min.js`). To run it locally:
+
+```bash
+npm run demo
+```
+
+Add `?js` to the URL to force the JavaScript fallback and compare it with native timelines. To publish it, enable GitHub Pages for the `main` branch (root folder).
 
 ## Tips
 

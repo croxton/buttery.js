@@ -435,6 +435,30 @@ var getSyntaxForUnit = function(unit) {
 	};
 };
 /**
+* Checks if a stylesheet already registers a custom property with @property.
+* CSS.registerProperty() doesn't throw in that case: it silently takes precedence,
+* which would replace the author's syntax and initial value.
+* @param {String} name
+* @returns {Boolean}
+*/
+var hasPropertyRule = function(name) {
+	if (typeof CSSPropertyRule === "undefined") return false;
+	const search = function(rules) {
+		for (const rule of rules) {
+			if (rule instanceof CSSPropertyRule && rule.name === name) return true;
+			if (rule.cssRules != null && search(rule.cssRules)) return true;
+		}
+		return false;
+	};
+	return [...document.styleSheets, ...document.adoptedStyleSheets || []].some((sheet) => {
+		try {
+			return search(sheet.cssRules);
+		} catch (error) {
+			return false;
+		}
+	});
+};
+/**
 * Registers a custom property so it can be interpolated by the animation engine.
 * @param {String} name
 * @param {String} unit
@@ -445,6 +469,10 @@ var registerCustomProperty = function(name, unit) {
 	if (registeredProperties.has(name)) {
 		const existing = registeredProperties.get(name);
 		return existing === null || existing === syntax;
+	}
+	if (hasPropertyRule(name)) {
+		registeredProperties.set(name, null);
+		return true;
 	}
 	try {
 		CSS.registerProperty({

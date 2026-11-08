@@ -18,3 +18,5 @@ ehthumbs.db
 *.tmproj
 *.tmproject
 .vscode
+.claude
+_dev
