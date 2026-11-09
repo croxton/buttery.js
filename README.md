@@ -6,6 +6,7 @@ When the browser supports it, the library uses native **scroll-driven animations
 
 ## Contents
 
+- [Demo](#demo)
 - [What's different from the original](#whats-different-from-the-original)
 - [Requirements](#requirements)
 - [Setup](#setup)
@@ -17,8 +18,11 @@ When the browser supports it, the library uses native **scroll-driven animations
 - [Rendering modes](#rendering-modes)
 - [Custom properties and `@property`](#custom-properties-and-property)
 - [iOS Safari](#ios-safari)
-- [Demo](#demo)
 - [Tips](#tips)
+
+## Demo
+
+[Live demo](https://croxton.github.io/buttery.js/demo/)
 
 ## What's different from the original
 
@@ -280,9 +284,7 @@ Vite builds `lib/buttery.js` twice (see `vite.config.js`):
 | `dist/buttery.cjs` | `require()` | left as requires |
 | `dist/buttery.min.js` | `<script>` tag / CDN, `window.buttery` | bundled, minified |
 
-## Demo
-
-[Live demo](https://croxton.github.io/buttery.js/demo/)
+### Demo
 
 `demo/` is a static page that uses the script-tag build (`dist/buttery.min.js`). To run it locally:
 
@@ -290,7 +292,7 @@ Vite builds `lib/buttery.js` twice (see `vite.config.js`):
 npm run demo
 ```
 
-Add `?js` to the URL to force the JavaScript fallback and compare it with native timelines. To publish it, enable GitHub Pages for the `main` branch (root folder).
+Add `?js` to the URL to force the JavaScript fallback and compare it with native timelines.
 
 ## Tips
 
