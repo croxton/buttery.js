@@ -64,9 +64,8 @@
   from: 'top-bottom',
   to: 'bottom-top',
   props: {
-    '--tx':  { from: '-45vw', to: '45vw', timing: 'quadIn' },
-    '--ty':  { from: '40vh',  to: '-60vh', timing: 'quadIn' },
-    '--rot': { from: '-10deg', to: '15deg' }
+    translate: { from: '-45vw 40vh', to: '45vw -60vh', timing: 'quadIn' },
+    rotate:    { from: '-10deg', to: '15deg' }
   }
 }).start()</code></pre>
     </div>
@@ -78,8 +77,8 @@
       <h2>Daisy</h2>
       <p>Uses a <code>via</code> midpoint: she rises, then sinks back down, swaying as she goes.</p>
 <pre><code>props: {
-  '--ty':  { from: '120px', via: '-160px', to: '60px', timing: 'sineInOut' },
-  '--rot': { from: '-6deg', via: '6deg', to: '-4deg', timing: 'sineInOut' }
+  translate: { from: '0 120px', via: '0 -160px', to: '0 60px', timing: 'sineInOut' },
+  rotate:    { from: '-6deg', via: '6deg', to: '-4deg', timing: 'sineInOut' }
 }</code></pre>
     </div>
     <img class="balloon__cow mover" src="img/floating-cow.webp" width="900" height="900" alt="Daisy the cow, startled, tied to a yellow balloon">

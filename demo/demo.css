@@ -1,9 +1,3 @@
-/* Register the animated custom properties ourselves (see README: Custom properties and @property) */
-@property --tx    { syntax: "<length-percentage>"; inherits: false; initial-value: 0px; }
-@property --ty    { syntax: "<length-percentage>"; inherits: false; initial-value: 0px; }
-@property --rot   { syntax: "<angle>";             inherits: false; initial-value: 0deg; }
-@property --scale { syntax: "<number>";            inherits: false; initial-value: 1; }
-
 :root {
   --sky-top: #6ec3f4;
   --sky-bottom: #d9f0ff;
@@ -47,10 +41,11 @@ pre {
   line-height: 1.45;
 }
 
-/* Everything that moves. No transitions here: they fight scroll-driven values. */
+/* Everything that moves. Buttery animates the individual transform properties
+   (translate, rotate, scale) directly, so browsers can run them on the compositor.
+   No transitions here: they fight scroll-driven values. */
 .mover {
-  transform: translate3d(var(--tx), var(--ty), 0) rotate(var(--rot)) scale(var(--scale));
-  will-change: transform;
+  will-change: translate, rotate, scale;
 }
 
 .scene { position: relative; overflow: clip; }
@@ -218,7 +213,7 @@ pre {
 }
 .landscape svg { display: block; width: 100%; height: 100%; }
 
-/* The mountains start raised (negative --ty), so each one carries a solid
+/* The mountains start raised (negative translate), so each one carries a solid
    30vh skirt below the edge of the footer to avoid a gap underneath. */
 .mountains--far,
 .mountains--near {

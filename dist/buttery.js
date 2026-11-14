@@ -206,6 +206,45 @@ var parseAbsoluteValue = function(value) {
 		unit: parsedValue[1]
 	};
 };
+var NUMBER_PATTERN = /(^|[^\w#.])(-?(?:\d+\.?\d*|\.\d+))([a-zA-Z%]*)/g;
+/**
+* Parses a prop value that can contain several numbers, e.g. `'-100px'`,
+* `'0 -100px'` or `'translateY(10px) rotate(5deg)'`.
+* The text around the numbers is kept, so the value can be rebuilt after interpolation.
+* @param {String|Number} value
+* @returns {?Object} { numbers: [{ value, unit }], parts: [String] } (parts.length = numbers.length + 1),
+*   or null if the value contains no number.
+*/
+var parsePropValue = function(value) {
+	const string = String(value).trim();
+	const numbers = [];
+	const parts = [];
+	let last = 0;
+	for (const match of string.matchAll(NUMBER_PATTERN)) {
+		const start = match.index + match[1].length;
+		parts.push(string.slice(last, start));
+		numbers.push({
+			value: parseFloat(match[2]),
+			unit: match[3]
+		});
+		last = match.index + match[0].length;
+	}
+	if (numbers.length === 0) return null;
+	parts.push(string.slice(last));
+	return {
+		numbers,
+		parts: parts.map((part) => part.replace(/\s+/g, " "))
+	};
+};
+/**
+* Checks that two parsed prop values have the same structure.
+* @param {Object} a
+* @param {Object} b
+* @returns {Boolean}
+*/
+var hasSameStructure = function(a, b) {
+	return a.numbers.length === b.numbers.length && a.parts.every((part, i) => part === b.parts[i]);
+};
 /**
 * Checks if a value is relative.
 * A relative value must start and end with [a-z] and needs a '-' in the middle.
@@ -304,17 +343,23 @@ var validate = function(data = {}) {
 	data.to = parseAbsoluteValue(data.to);
 	data.props = Object.keys(data.props).reduce((acc, key) => {
 		const prop = Object.assign({}, data.props[key]);
-		if (isAbsoluteValue(prop.from) === false) throw new Error("Property `from` of prop must be a absolute value");
-		if (isAbsoluteValue(prop.to) === false) throw new Error("Property `to` of prop must be a absolute value");
-		if (prop.via != null && isAbsoluteValue(prop.via) === false) throw new Error("Property `via` of prop must be a absolute value");
-		prop.from = parseAbsoluteValue(prop.from);
-		prop.to = parseAbsoluteValue(prop.to);
-		if (prop.via != null) prop.via = parseAbsoluteValue(prop.via);
+		const from = parsePropValue(prop.from);
+		const to = parsePropValue(prop.to);
+		const via = prop.via != null ? parsePropValue(prop.via) : null;
+		if (from == null) throw new Error("Property `from` of prop must contain a number");
+		if (to == null) throw new Error("Property `to` of prop must contain a number");
+		if (prop.via != null && via == null) throw new Error("Property `via` of prop must contain a number");
+		if (hasSameStructure(from, to) === false) throw new Error(`Properties \`from\` and \`to\` of prop \`${key}\` must have the same number of values and the same text around them`);
+		if (via != null && hasSameStructure(from, via) === false) throw new Error(`Property \`via\` of prop \`${key}\` must have the same number of values and the same text around them as \`from\``);
+		prop.from = from.numbers.map((number) => number.value);
+		prop.to = to.numbers.map((number) => number.value);
+		prop.via = via != null ? via.numbers.map((number) => number.value) : null;
+		prop.parts = from.parts;
+		prop.units = from.numbers.map((number, i) => number.unit || to.numbers[i].unit || (via != null ? via.numbers[i].unit : ""));
 		if (prop.timing == null) prop.timing = eases["linear"];
 		if (typeof prop.timing !== "string" && typeof prop.timing !== "function") throw new Error("Property `timing` of prop must be undefined, a string or a function");
 		if (typeof prop.timing === "string" && eases[prop.timing] == null) throw new Error("Unknown timing for property `timing` of prop");
 		if (typeof prop.timing === "string") prop.timing = eases[prop.timing];
-		prop.unit = prop.from.unit || prop.to.unit;
 		acc[key] = prop;
 		return acc;
 	}, {});
@@ -347,25 +392,26 @@ var computeProps = function(data, scrollTop) {
 	const props = {};
 	for (const key of data.propKeys) {
 		const prop = data.props[key];
-		const unit = prop.unit;
 		const time = prop.timing(normalizedTime);
-		let value;
+		let start = prop.from;
+		let end = prop.to;
+		let localTime = time;
 		if (prop.via != null) {
 			const midpoint = .5;
 			if (time <= midpoint) {
-				const localTime = time / midpoint;
-				const diff = prop.from.value - prop.via.value;
-				value = prop.from.value - diff * localTime;
+				end = prop.via;
+				localTime = time / midpoint;
 			} else {
-				const localTime = (time - midpoint) / midpoint;
-				const diff = prop.via.value - prop.to.value;
-				value = prop.via.value - diff * localTime;
+				start = prop.via;
+				localTime = (time - midpoint) / midpoint;
 			}
-		} else {
-			const diff = prop.from.value - prop.to.value;
-			value = prop.from.value - diff * time;
 		}
-		props[key] = Math.round(value * 1e4) / 1e4 + unit;
+		let output = prop.parts[0];
+		for (let i = 0; i < start.length; i++) {
+			const value = start[i] - (start[i] - end[i]) * localTime;
+			output += Math.round(value * 1e4) / 1e4 + prop.units[i] + prop.parts[i + 1];
+		}
+		props[key] = output;
 	}
 	return {
 		precisePercentage,
@@ -440,11 +486,26 @@ var pickProps = function(props, keys) {
 var getAnimatedKeys = function(data) {
 	return Object.keys(data.props).filter((key) => {
 		const prop = data.props[key];
-		return (prop.from.value === prop.to.value && (prop.via == null || prop.via.value === prop.from.value)) === false;
+		return prop.from.every((value, i) => value === prop.to[i] && (prop.via == null || prop.via[i] === value)) === false;
 	});
 };
 /**
 * Returns the CSS syntax and initial value to register a custom property with.
+* A value with several numbers needs a space-separated list syntax (e.g. `<length-percentage>+`).
+* @param {Object} prop - Validated prop.
+* @returns {?Object} null if no syntax can describe the value (e.g. it contains functions).
+*/
+var getSyntaxForProp = function(prop) {
+	const types = prop.units.map((unit) => getSyntaxForUnit(unit));
+	if (types.length === 1 && prop.parts[0] === "" && prop.parts[1] === "") return types[0];
+	if ((prop.parts[0] === "" && prop.parts[prop.parts.length - 1] === "" && prop.parts.slice(1, -1).every((part) => part === " ") && types.every((type) => type.syntax === types[0].syntax)) === false) return null;
+	return {
+		syntax: `${types[0].syntax}+`,
+		initialValue: types[0].initialValue
+	};
+};
+/**
+* Returns the CSS syntax and initial value for a single number with a unit.
 * @param {String} unit
 * @returns {Object}
 */
@@ -498,19 +559,21 @@ var hasPropertyRule = function(name) {
 /**
 * Registers a custom property so it can be interpolated by the animation engine.
 * @param {String} name
-* @param {String} unit
+* @param {Object} prop - Validated prop.
 * @returns {Boolean} Whether the property can be animated smoothly.
 */
-var registerCustomProperty = function(name, unit) {
-	const { syntax, initialValue } = getSyntaxForUnit(unit);
+var registerCustomProperty = function(name, prop) {
+	const type = getSyntaxForProp(prop);
 	if (registeredProperties.has(name)) {
 		const existing = registeredProperties.get(name);
-		return existing === null || existing === syntax;
+		return existing === null || type != null && existing === type.syntax;
 	}
 	if (hasPropertyRule(name)) {
 		registeredProperties.set(name, null);
 		return true;
 	}
+	if (type == null) return false;
+	const { syntax, initialValue } = type;
 	try {
 		CSS.registerProperty({
 			name,
@@ -564,8 +627,7 @@ var canUseTimeline = function(data, animatedKeys) {
 	if (supportsTimeline() === false) return false;
 	return animatedKeys.every((key) => {
 		if (key.startsWith("--") === false) return true;
-		const prop = data.props[key];
-		return registerCustomProperty(key, prop.from.unit || prop.to.unit);
+		return registerCustomProperty(key, data.props[key]);
 	});
 };
 /**

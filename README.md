@@ -34,6 +34,7 @@ Alternatively, if you already use [Lenis](https://github.com/darkroomengineering
 | Lifecycle | Starts automatically on import | Explicit `mount()` / `unmount()` (works with page transitions, e.g. htmx) |
 | Relative anchors | `top`, `middle`, `bottom` | Also percentages, e.g. `50%-40%` |
 | Prop keyframes | `from` → `to` | Optional `via` midpoint value |
+| Prop values | One number | Several numbers, e.g. `translate: '0 -100px'` or `'translateY(10px) rotate(5deg)'` |
 | Resize handling | Recalculates on every `resize` | Ignores height-only resizes (iOS toolbar); recalculating on width changes is opt-in |
 | Overscroll | Animations follow the rubber-band bounce | Scroll position is clamped to the scrollable range |
 | Viewport height | `window.innerHeight` | Stable `documentElement.clientHeight` |
@@ -216,7 +217,40 @@ props: {
 
 Units come from `from` or `to`, so `from: 0, to: '100px'` animates in `px`.
 
-Keys can be CSS custom properties (`--ty`) or normal CSS properties (`opacity`, `transform`).
+Keys can be CSS custom properties (`--ty`) or normal CSS properties (`opacity`, `translate`, `transform`).
+
+### Values with several numbers
+
+A value can contain several numbers. Each one is interpolated on its own, and the text around them is kept:
+
+```javascript
+props: {
+  translate: { from: '-45vw 40vh', to: '45vw -60vh', timing: 'quadIn' },
+  rotate:    { from: '-10deg', to: '15deg' },
+  transform: { from: 'translateY(0px) scale(1)', to: 'translateY(-100px) scale(1.2)' },
+  '--pos':   { from: '0px 0px', to: '20px -100px' }
+}
+```
+
+- `from`, `to` and `via` must have the same structure: the same number of numbers, and the same text around them. Otherwise `create()` throws an error.
+- Units come from `from`, `to` or `via` for each number separately, so `from: '0 0'` with `to: '10px 20px'` works.
+- Single values work exactly as before.
+
+### Animate compositor properties directly
+
+For the smoothest native animations, animate `translate`, `rotate`, `scale` or `opacity` directly instead of a custom property used in CSS:
+
+```javascript
+// Composited: the browser can run this off the main thread
+props: { translate: { from: '0 0px', to: '0 -100px' } }
+
+// Main thread: the custom property is recalculated every frame, then used in `transform`
+props: { '--ty': { from: '0px', to: '-100px' } }   // with .el { transform: translateY(var(--ty)) }
+```
+
+Browsers can't run custom-property animations on the compositor, so they're recalculated on the main thread every frame. A busy main thread (scripts, image decoding) then makes them stutter. Animating `translate` and the like directly lets browsers that support it (such as Chrome) run the scroll-driven animation on the compositor.
+
+`translate`, `rotate` and `scale` are separate properties, so different instances can animate them on the same element without overwriting each other. They combine with the element's `transform`, so use them on elements that don't need custom-property transforms. Custom properties still work as before. Use them when one value feeds several properties, or for anything the compositor can't animate.
 
 ## Rendering modes
 
@@ -297,6 +331,8 @@ If a property isn't registered yet, the library registers it with `CSS.registerP
 | `s`, `ms` | `<time>` | `0s` |
 | anything else | `<length-percentage>` | `0px` |
 
+A value with several numbers separated only by spaces, all of the same type, is registered as a list, e.g. `'0px -100px'` → `<length-percentage>+`. Other values with several numbers, such as `'translateY(10px) rotate(5deg)'`, can't be registered. They use the JavaScript fallback in a custom property, unless you register a matching syntax yourself.
+
 Registration affects the whole site: a registered property always has a value, so `var(--x, fallback)` fallbacks stop working. **It's better to register the properties yourself in CSS**, with sensible initial values. The library will then use your registrations:
 
 ```css
@@ -344,7 +380,7 @@ Add `?js` to the URL to force the JavaScript fallback, or `?lenis` to smooth-scr
 ## Tips
 
 - **Don't put CSS `transition`s on scroll-driven properties.** In timeline mode they add delay to every frame. In fallback mode they cause wobble on iOS.
-- **Prefer `transform` and `opacity`.** Animate them directly as prop keys where you can, e.g. `props: { opacity: { from: 0, to: 1 } }`. The GPU can run these, while custom properties are updated on the main thread.
+- **Prefer `translate`, `rotate`, `scale` and `opacity`.** Animate them directly as prop keys where you can, e.g. `props: { translate: { from: '0 0px', to: '0 -100px' } }`. The GPU can run these, while custom properties are updated on the main thread. See [Animate compositor properties directly](#animate-compositor-properties-directly).
 - **Animate HTML elements, not SVG children.** WebKit doesn't give SVG `<path>` elements their own GPU layer, so animating them repaints the whole SVG.
 - **Avoid animating `filter: blur()`** and avoid putting scroll-driven elements inside `mask: url(#…)` on mobile. Both force software repaints.
 - **Call `calculate()` after layout changes** that move elements, such as content loading in or temporary `position: sticky` changes. Changes to page height alone are picked up automatically.

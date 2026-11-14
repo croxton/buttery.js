@@ -68,13 +68,16 @@
     // `elem` is the section, which never moves, so its measurements stay accurate.
     // `direct` is the element that receives the animated values.
     const configs = [
+      // Values with two numbers (`translate: x y`) animate the individual transform
+      // properties directly, which browsers can run on the compositor thread.
+
       // 1. Clouds: three depths, nearer = faster
       ...[['far', '-80px'], ['mid', '-200px'], ['near', '-420px']].map(([depth, to]) => ({
         elem: sky,
         direct: sky.querySelector(`[data-depth="${depth}"]`),
         from: 'top-top',
         to: 'bottom-top',
-        props: { '--ty': { from: '0px', to } }
+        props: { translate: { from: '0 0px', to: `0 ${to}` } }
       })),
 
       // 2. Rocket cow
@@ -84,9 +87,8 @@
         from: 'top-bottom',
         to: 'bottom-top',
         props: {
-          '--tx': { from: '-45vw', to: '45vw', timing: 'quadIn' },
-          '--ty': { from: '40vh', to: '-60vh', timing: 'quadIn' },
-          '--rot': { from: '-10deg', to: '15deg' }
+          translate: { from: '-45vw 40vh', to: '45vw -60vh', timing: 'quadIn' },
+          rotate: { from: '-10deg', to: '15deg' }
         }
       },
 
@@ -97,8 +99,8 @@
         from: 'top-bottom',
         to: 'bottom-top',
         props: {
-          '--ty': { from: '120px', via: '-160px', to: '60px', timing: 'sineInOut' },
-          '--rot': { from: '-6deg', via: '6deg', to: '-4deg', timing: 'sineInOut' }
+          translate: { from: '0 120px', via: '0 -160px', to: '0 60px', timing: 'sineInOut' },
+          rotate: { from: '-6deg', via: '6deg', to: '-4deg', timing: 'sineInOut' }
         }
       },
 
@@ -109,8 +111,8 @@
         from: 'top-bottom',
         to: 'bottom-top',
         props: {
-          '--ty': { from: '30vh', to: '-30vh' },
-          '--scale': { from: 0.8, to: 1 }
+          translate: { from: '0 30vh', to: '0 -30vh' },
+          scale: { from: 0.8, to: 1 }
         }
       },
       {
@@ -118,7 +120,7 @@
         direct: $('.layers__front'),
         from: 'top-bottom',
         to: 'bottom-top',
-        props: { '--ty': { from: '90vh', to: '-90vh' } }
+        props: { translate: { from: '0 90vh', to: '0 -90vh' } }
       },
       {
         elem: layers,
@@ -145,7 +147,7 @@
         direct: $(selector),
         from: 'top-bottom',
         to: 'bottom-bottom',
-        props: { '--ty': { from, to: '0vh' } }
+        props: { translate: { from: `0 ${from}`, to: '0 0vh' } }
       }))
     ]
 
