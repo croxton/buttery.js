@@ -43,6 +43,9 @@ var settings = {
 };
 var TIMELINE_SAMPLES = 30;
 var styleCache = /* @__PURE__ */ new WeakMap();
+var LAST_TIME = Symbol("lastTime");
+var internals = /* @__PURE__ */ new WeakMap();
+var lists = null;
 var registeredProperties = /* @__PURE__ */ new Map();
 /**
 * Debounces a function that will be triggered many times.
@@ -68,20 +71,31 @@ var isLenisDriven = function(instance) {
 	return init === true && settings.lenis != null && instance.getData().timeline === "lenis" && instance.usesTimeline() === false;
 };
 /**
-* Returns all active instances that are driven by the JS loop (window scroll listener).
-* @param {Array} instances
-* @returns {Array} instances
+* Marks the cached instance lists as stale.
+* Call whenever an instance is added, removed, started, stopped or changes mode.
 */
-var getLoopInstances = function(instances) {
-	return instances.filter((instance) => instance != null && instance.isActive() && instance.usesTimeline() === false && isLenisDriven(instance) === false);
+var invalidateLists = function() {
+	lists = null;
 };
 /**
-* Returns all active instances that are driven by Lenis.
-* @param {Array} instances
-* @returns {Array} instances
+* Returns the active instances driven by the JS loop (window scroll listener)
+* and by Lenis. Cached, so filtering doesn't happen on every frame.
+* @returns {Object} { loop, lenis }
 */
-var getLenisInstances = function(instances) {
-	return instances.filter((instance) => instance != null && instance.isActive() && isLenisDriven(instance));
+var getLists = function() {
+	if (lists != null) return lists;
+	const loop = [];
+	const lenis = [];
+	for (const instance of instances) {
+		if (instance == null || instance.isActive() === false || instance.usesTimeline()) continue;
+		if (isLenisDriven(instance)) lenis.push(instance);
+		else loop.push(instance);
+	}
+	lists = {
+		loop,
+		lenis
+	};
+	return lists;
 };
 /**
 * Returns all tracked instances from an array.
@@ -300,26 +314,40 @@ var validate = function(data = {}) {
 		if (typeof prop.timing !== "string" && typeof prop.timing !== "function") throw new Error("Property `timing` of prop must be undefined, a string or a function");
 		if (typeof prop.timing === "string" && eases[prop.timing] == null) throw new Error("Unknown timing for property `timing` of prop");
 		if (typeof prop.timing === "string") prop.timing = eases[prop.timing];
+		prop.unit = prop.from.unit || prop.to.unit;
 		acc[key] = prop;
 		return acc;
 	}, {});
+	data.propKeys = Object.keys(data.props);
 	return data;
+};
+/**
+* Calculates how far through its range an instance is.
+* @param {Object} data - Validated data.
+* @param {Number} scrollTop - Pixels scrolled in document (clamped).
+* @returns {Object} precisePercentage (unclamped) and normalizedTime (clamped 0–1)
+*/
+var getProgress = function(data, scrollTop) {
+	const total = data.to.value - data.from.value;
+	const current = scrollTop - data.from.value;
+	const precisePercentage = total === 0 ? current >= 0 ? 100 : 0 : current / (total / 100);
+	return {
+		precisePercentage,
+		normalizedTime: Math.min(Math.max(precisePercentage, 0), 100) / 100
+	};
 };
 /**
 * Calculates prop values for a given scroll position. Pure: no callbacks, no DOM writes.
 * @param {Object} data - Validated data.
 * @param {Number} scrollTop - Pixels scrolled in document (clamped).
-* @returns {Object} precisePercentage and props
+* @returns {Object} precisePercentage, normalizedTime and props
 */
 var computeProps = function(data, scrollTop) {
-	const total = data.to.value - data.from.value;
-	const current = scrollTop - data.from.value;
-	const precisePercentage = total === 0 ? current >= 0 ? 100 : 0 : current / (total / 100);
-	const normalizedTime = Math.min(Math.max(precisePercentage, 0), 100) / 100;
+	const { precisePercentage, normalizedTime } = getProgress(data, scrollTop);
 	const props = {};
-	for (const key of Object.keys(data.props)) {
+	for (const key of data.propKeys) {
 		const prop = data.props[key];
-		const unit = prop.from.unit || prop.to.unit;
+		const unit = prop.unit;
 		const time = prop.timing(normalizedTime);
 		let value;
 		if (prop.via != null) {
@@ -341,6 +369,7 @@ var computeProps = function(data, scrollTop) {
 	}
 	return {
 		precisePercentage,
+		normalizedTime,
 		props
 	};
 };
@@ -352,11 +381,12 @@ var computeProps = function(data, scrollTop) {
 */
 var getProps = function(instance, scrollTop = getScrollTop()) {
 	const data = instance.getData();
-	const { precisePercentage, props } = computeProps(data, scrollTop);
+	const { precisePercentage, normalizedTime, props } = computeProps(data, scrollTop);
 	if ((precisePercentage >= 0 && precisePercentage <= 100) === true) data.inside(instance, precisePercentage, props);
 	else data.outside(instance, precisePercentage, props);
 	return {
 		elem: getElem(data),
+		normalizedTime,
 		props
 	};
 };
@@ -566,13 +596,26 @@ var buildKeyframes = function(data, keys, max) {
 * Make sure it's performant as hell.
 * @param {Array} list - Instances to render.
 * @param {Number} scrollTop - Pixels scrolled in document (clamped).
+* @param {Boolean} force - Render even when an instance's progress hasn't changed.
 */
-var renderInstances = function(list, scrollTop) {
-	const results = list.map((instance) => ({
-		instance,
-		...getProps(instance, scrollTop)
-	}));
-	for (const { instance, elem, props } of results) setProps(elem, props, getStyleCache(instance));
+var renderInstances = function(list, scrollTop, force = false) {
+	const results = new Array(list.length);
+	for (let i = 0; i < list.length; i++) {
+		const instance = list[i];
+		const data = instance.getData();
+		if (force === false && data.hasCallbacks === false) {
+			const cache = styleCache.get(instance);
+			if (cache != null && cache[LAST_TIME] === getProgress(data, scrollTop).normalizedTime) continue;
+		}
+		results[i] = getProps(instance, scrollTop);
+	}
+	for (let i = 0; i < list.length; i++) {
+		const result = results[i];
+		if (result === void 0) continue;
+		const cache = getStyleCache(list[i]);
+		setProps(result.elem, result.props, cache);
+		cache[LAST_TIME] = result.normalizedTime;
+	}
 };
 /**
 * Gets and sets new props of all active Lenis instances.
@@ -581,12 +624,12 @@ var renderInstances = function(list, scrollTop) {
 */
 var updateLenis = function(force = false) {
 	if (settings.lenis == null) return;
-	const lenisInstances = getLenisInstances(instances);
+	const lenisInstances = getLists().lenis;
 	if (lenisInstances.length === 0) return;
 	const scrollTop = getLenisScrollTop();
 	if (force === false && previousLenisScroll === scrollTop) return;
 	previousLenisScroll = scrollTop;
-	renderInstances(lenisInstances, scrollTop);
+	renderInstances(lenisInstances, scrollTop, force);
 };
 /**
 * Gets and sets new props of all active loop instances.
@@ -595,12 +638,12 @@ var updateLenis = function(force = false) {
 */
 var update = function(force = false) {
 	if (force === true) updateLenis(true);
-	const loopInstances = getLoopInstances(instances);
+	const loopInstances = getLists().loop;
 	if (loopInstances.length === 0) return;
 	const scrollTop = getScrollTop();
 	if (force === false && previousScrollTop === scrollTop) return;
 	previousScrollTop = scrollTop;
-	renderInstances(loopInstances, scrollTop);
+	renderInstances(loopInstances, scrollTop, force);
 };
 /**
 * Schedules an update for the next animation frame.
@@ -629,14 +672,33 @@ var requestTimelineRefresh = function() {
 		const max = getMaxScrollTop();
 		if (max === lastTimelineMax) return;
 		lastTimelineMax = max;
-		for (const instance of instances) if (instance != null && instance.usesTimeline()) instance.syncTimeline();
+		const scrollTop = getScrollTop();
+		for (const instance of instances) if (instance != null && instance.usesTimeline()) instance.syncTimeline(scrollTop, max);
 	});
+};
+/**
+* Recalculates instances in two passes: all measurements first, then all style
+* writes, so the layout is only computed once instead of once per instance.
+* @param {Array} list
+*/
+var calculateInstances = function(list) {
+	viewportHeight = null;
+	maxScrollTop = null;
+	for (const instance of list) internals.get(instance).measure();
+	invalidateLists();
+	let scrollTop;
+	let max;
+	if (list.some((instance) => instance.usesTimeline())) {
+		scrollTop = getScrollTop();
+		max = getMaxScrollTop();
+	}
+	for (const instance of list) internals.get(instance).apply(scrollTop, max);
 };
 /**
 * Recalculates all tracked instances (e.g. after a layout change).
 */
 var recalculateAll = function() {
-	getTrackedInstances(instances).forEach((instance) => instance.calculate());
+	calculateInstances(getTrackedInstances(instances));
 };
 /**
 * Handles resize events.
@@ -685,17 +747,19 @@ var create = function(data) {
 		_cancelAnimation();
 		timelineMode = false;
 		styleCache.delete(instance);
+		invalidateLists();
 		if (active) requestUpdate(true);
 	};
-	const _syncTimeline = () => {
+	const _syncTimeline = (scrollTop, max) => {
 		if (timelineMode === false) return;
 		const elem = getElem(_data);
 		if (elem == null) return;
+		if (scrollTop == null) scrollTop = getScrollTop();
+		if (max == null) max = getMaxScrollTop();
 		const cache = getStyleCache(instance);
-		const { props } = computeProps(_data, getScrollTop());
+		const { props } = computeProps(_data, scrollTop);
 		setProps(elem, pickProps(props, Object.keys(props).filter((key) => animatedKeys.includes(key) === false)), cache);
 		if (active === false && animation == null) return;
-		const max = getMaxScrollTop();
 		if (animatedKeys.length === 0 || max <= 0) {
 			_cancelAnimation();
 			setProps(elem, pickProps(props, animatedKeys), cache);
@@ -720,15 +784,18 @@ var create = function(data) {
 			_fallback();
 		}
 	};
-	const _calculate = function() {
-		viewportHeight = null;
-		maxScrollTop = null;
+	const _measure = function() {
 		_data = validate(data);
 		styleCache.delete(instance);
 		animatedKeys = getAnimatedKeys(_data);
 		timelineMode = canUseTimeline(_data, animatedKeys);
-		if (timelineMode) _syncTimeline();
+	};
+	const _apply = function(scrollTop, max) {
+		if (timelineMode) _syncTimeline(scrollTop, max);
 		else _cancelAnimation();
+	};
+	const _calculate = function() {
+		calculateInstances([instance]);
 	};
 	const _update = () => {
 		if (timelineMode) {
@@ -737,23 +804,28 @@ var create = function(data) {
 			return props;
 		}
 		const scrollTop = isLenisDriven(instance) ? getLenisScrollTop() : getScrollTop();
-		const { elem, props } = getProps(instance, scrollTop);
-		setProps(elem, props, getStyleCache(instance));
+		const { elem, normalizedTime, props } = getProps(instance, scrollTop);
+		const cache = getStyleCache(instance);
+		setProps(elem, props, cache);
+		cache[LAST_TIME] = normalizedTime;
 		return props;
 	};
 	const _start = () => {
 		active = true;
+		invalidateLists();
 		if (timelineMode) _syncTimeline();
 		else requestUpdate(true);
 	};
 	const _stop = () => {
 		active = false;
+		invalidateLists();
 		if (animation != null) animation.pause();
 	};
 	const _destroy = () => {
 		_cancelAnimation();
 		instances[index] = void 0;
 		styleCache.delete(instance);
+		invalidateLists();
 	};
 	const instance = {
 		isActive: _isActive,
@@ -767,7 +839,12 @@ var create = function(data) {
 		stop: _stop,
 		destroy: _destroy
 	};
+	internals.set(instance, {
+		measure: _measure,
+		apply: _apply
+	});
 	const index = instances.push(instance) - 1;
+	invalidateLists();
 	instance.calculate();
 	return instance;
 };
@@ -790,7 +867,9 @@ var mount = function(options = {}) {
 	previousScrollTop = null;
 	previousLenisScroll = null;
 	lastTimelineMax = null;
-	const onScroll = () => requestUpdate(false);
+	const onScroll = () => {
+		if (getLists().loop.length > 0) requestUpdate(false);
+	};
 	const onPageShow = () => {
 		maxScrollTop = null;
 		lastTimelineMax = null;
@@ -802,7 +881,8 @@ var mount = function(options = {}) {
 		onPageShow,
 		offLenis: null
 	};
-	for (const instance of instances) if (instance != null && instance.getData().timeline === "lenis") instance.calculate();
+	invalidateLists();
+	calculateInstances(instances.filter((instance) => instance != null && instance.getData().timeline === "lenis"));
 	const lenis = settings.lenis;
 	if (lenis != null) {
 		if (typeof lenis.on !== "function") throw new Error("Option `lenis` must be a Lenis instance");
@@ -863,6 +943,7 @@ var unmount = function() {
 	lastTimelineMax = null;
 	settings = Object.assign({}, settings, { lenis: null });
 	init = false;
+	invalidateLists();
 };
 export { create, mount, supportsTimeline, unmount };
 
