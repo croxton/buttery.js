@@ -94,6 +94,7 @@ pre {
 }
 .badge[data-mode="native"] { --dot: #5ee07a; }
 .badge[data-mode="js"]     { --dot: #ffc940; }
+.badge[data-mode="lenis"]  { --dot: #6bb8ff; }
 .badge[data-mode="off"]    { --dot: #ff7a6b; }
 
 /* 1. Sky */

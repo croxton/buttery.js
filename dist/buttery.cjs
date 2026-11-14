@@ -36,6 +36,8 @@ eases = __toESM(eases, 1);
 *   so values update in sync with scrolling without per-frame JavaScript.
 * - Falls back to an event-driven requestAnimationFrame loop otherwise.
 * - Instances with `inside`/`outside` callbacks use the fallback by default (callbacks need JS per frame).
+* - Optional 'lenis' mode: instances update synchronously from a Lenis instance's `scroll` event,
+*   using its sub-pixel scroll position, instead of the window scroll listener.
 * - Clamps scrollTop to avoid rubber-band (overscroll) bounce affecting animations
 * - Uses a stable viewport height that doesn't change when the iOS toolbar collapses/expands
 * - Ignores height-only resize events (iOS address bar show/hide) for recalculation
@@ -46,6 +48,7 @@ var frameId = null;
 var pendingForce = false;
 var init = false;
 var previousScrollTop = null;
+var previousLenisScroll = null;
 var maxScrollTop = null;
 var viewportHeight = null;
 var viewportWidth = null;
@@ -57,7 +60,8 @@ var scrollTimeline = null;
 var timelineSupport = null;
 var settings = {
 	recalculateOnResize: false,
-	timeline: true
+	timeline: true,
+	lenis: null
 };
 var TIMELINE_SAMPLES = 30;
 var styleCache = /* @__PURE__ */ new WeakMap();
@@ -78,12 +82,28 @@ var debounce = function(fn, duration) {
 	return debounced;
 };
 /**
-* Returns all active instances that are driven by the JS loop.
+* Checks if an instance is driven by an attached Lenis instance.
+* @param {Object} instance
+* @returns {Boolean}
+*/
+var isLenisDriven = function(instance) {
+	return init === true && settings.lenis != null && instance.getData().timeline === "lenis";
+};
+/**
+* Returns all active instances that are driven by the JS loop (window scroll listener).
 * @param {Array} instances
 * @returns {Array} instances
 */
 var getLoopInstances = function(instances) {
-	return instances.filter((instance) => instance != null && instance.isActive() && instance.usesTimeline() === false);
+	return instances.filter((instance) => instance != null && instance.isActive() && instance.usesTimeline() === false && isLenisDriven(instance) === false);
+};
+/**
+* Returns all active instances that are driven by Lenis.
+* @param {Array} instances
+* @returns {Array} instances
+*/
+var getLenisInstances = function(instances) {
+	return instances.filter((instance) => instance != null && instance.isActive() && isLenisDriven(instance));
 };
 /**
 * Returns all tracked instances from an array.
@@ -146,6 +166,15 @@ var getScrollTop = function() {
 	if (scrollTop <= 0) return 0;
 	if (maxScrollTop == null || scrollTop > maxScrollTop) maxScrollTop = getMaxScrollTop();
 	return Math.min(scrollTop, maxScrollTop);
+};
+/**
+* Returns the (sub-pixel) scroll position of the attached Lenis instance,
+* clamped to its scrollable range.
+* @returns {Number} scrollTop
+*/
+var getLenisScrollTop = function() {
+	const lenis = settings.lenis;
+	return Math.min(Math.max(lenis.scroll, 0), Math.max(lenis.limit, 0));
 };
 /**
 * Returns a stable height of the viewport.
@@ -271,7 +300,7 @@ var validate = function(data = {}) {
 	if (data.direct === true && data.elem == null) throw new Error("Property `elem` is required when `direct` is true");
 	if (typeof data.track !== "boolean") throw new Error("Property `track` must be undefined or a boolean");
 	if (typeof data.props !== "object") throw new Error("Property `props` must be undefined or an object");
-	if (data.timeline !== "auto" && typeof data.timeline !== "boolean") throw new Error("Property `timeline` must be undefined, a boolean or 'auto'");
+	if (data.timeline !== "auto" && data.timeline !== "lenis" && typeof data.timeline !== "boolean") throw new Error("Property `timeline` must be undefined, a boolean, 'auto' or 'lenis'");
 	if (data.elem == null) {
 		if (isAbsoluteValue(data.from) === false) throw new Error("Property `from` must be a absolute value when no `elem` has been provided");
 		if (isAbsoluteValue(data.to) === false) throw new Error("Property `to` must be a absolute value when no `elem` has been provided");
@@ -509,6 +538,7 @@ var toKeyframeKey = function(key) {
 var canUseTimeline = function(data, animatedKeys) {
 	if (settings.timeline === false) return false;
 	if (data.timeline === false) return false;
+	if (data.timeline === "lenis") return false;
 	if (data.timeline === "auto" && data.hasCallbacks === true) return false;
 	if (supportsTimeline() === false) return false;
 	return animatedKeys.every((key) => {
@@ -541,21 +571,45 @@ var buildKeyframes = function(data, keys, max) {
 	});
 };
 /**
+* Gets and sets new props of a list of instances.
+* Make sure it's performant as hell.
+* @param {Array} list - Instances to render.
+* @param {Number} scrollTop - Pixels scrolled in document (clamped).
+*/
+var renderInstances = function(list, scrollTop) {
+	const results = list.map((instance) => ({
+		instance,
+		...getProps(instance, scrollTop)
+	}));
+	for (const { instance, elem, props } of results) setProps(elem, props, getStyleCache(instance));
+};
+/**
+* Gets and sets new props of all active Lenis instances.
+* Runs synchronously inside Lenis's frame, right after it sets the scroll position.
+* @param {Boolean} force - Update even when the scroll position hasn't changed.
+*/
+var updateLenis = function(force = false) {
+	if (settings.lenis == null) return;
+	const lenisInstances = getLenisInstances(instances);
+	if (lenisInstances.length === 0) return;
+	const scrollTop = getLenisScrollTop();
+	if (force === false && previousLenisScroll === scrollTop) return;
+	previousLenisScroll = scrollTop;
+	renderInstances(lenisInstances, scrollTop);
+};
+/**
 * Gets and sets new props of all active loop instances.
 * Runs inside requestAnimationFrame. Make sure it's performant as hell.
 * @param {Boolean} force - Update even when scrollTop hasn't changed.
 */
 var update = function(force = false) {
+	if (force === true) updateLenis(true);
 	const loopInstances = getLoopInstances(instances);
 	if (loopInstances.length === 0) return;
 	const scrollTop = getScrollTop();
 	if (force === false && previousScrollTop === scrollTop) return;
 	previousScrollTop = scrollTop;
-	const results = loopInstances.map((instance) => ({
-		instance,
-		...getProps(instance, scrollTop)
-	}));
-	for (const { instance, elem, props } of results) setProps(elem, props, getStyleCache(instance));
+	renderInstances(loopInstances, scrollTop);
 };
 /**
 * Schedules an update for the next animation frame.
@@ -691,7 +745,8 @@ var create = function(data) {
 			const { props } = getProps(instance);
 			return props;
 		}
-		const { elem, props } = getProps(instance);
+		const scrollTop = isLenisDriven(instance) ? getLenisScrollTop() : getScrollTop();
+		const { elem, props } = getProps(instance, scrollTop);
 		setProps(elem, props, getStyleCache(instance));
 		return props;
 	};
@@ -713,6 +768,7 @@ var create = function(data) {
 		isActive: _isActive,
 		getData: _getData,
 		usesTimeline: _usesTimeline,
+		usesLenis: () => isLenisDriven(instance),
 		syncTimeline: _syncTimeline,
 		calculate: _calculate,
 		update: _update,
@@ -729,15 +785,17 @@ var create = function(data) {
 * @param {?Object} options
 * @param {?Boolean} options.recalculateOnResize - Recalculate tracked instances when the viewport width changes.
 * @param {?Boolean} options.timeline - Allow native scroll-driven animations (default true).
+* @param {?Object} options.lenis - A Lenis instance that drives instances with `timeline: 'lenis'`.
 */
 var mount = function(options = {}) {
 	if (init) return;
 	init = true;
-	settings = Object.assign({}, settings, options);
+	settings = Object.assign({}, settings, { lenis: null }, options);
 	viewportWidth = getViewportWidth();
 	viewportHeight = null;
 	maxScrollTop = null;
 	previousScrollTop = null;
+	previousLenisScroll = null;
 	lastTimelineMax = null;
 	const onScroll = () => requestUpdate(false);
 	const onPageShow = () => {
@@ -748,8 +806,16 @@ var mount = function(options = {}) {
 	};
 	listeners = {
 		onScroll,
-		onPageShow
+		onPageShow,
+		offLenis: null
 	};
+	const lenis = settings.lenis;
+	if (lenis != null) {
+		if (typeof lenis.on !== "function") throw new Error("Option `lenis` must be a Lenis instance");
+		const onLenisScroll = () => updateLenis(false);
+		const off = lenis.on("scroll", onLenisScroll);
+		listeners.offLenis = typeof off === "function" ? off : () => lenis.off("scroll", onLenisScroll);
+	}
 	window.addEventListener("scroll", onScroll, { passive: true });
 	window.addEventListener("resize", handleResize, { passive: true });
 	window.addEventListener("orientationchange", handleResize, { passive: true });
@@ -781,6 +847,7 @@ var unmount = function() {
 		window.removeEventListener("resize", handleResize);
 		window.removeEventListener("orientationchange", handleResize);
 		window.removeEventListener("pageshow", listeners.onPageShow);
+		if (listeners.offLenis != null) listeners.offLenis();
 		listeners = null;
 	}
 	handleResize.cancel();
@@ -798,7 +865,9 @@ var unmount = function() {
 	}
 	pendingForce = false;
 	previousScrollTop = null;
+	previousLenisScroll = null;
 	lastTimelineMax = null;
+	settings = Object.assign({}, settings, { lenis: null });
 	init = false;
 };
 exports.create = create;

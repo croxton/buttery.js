@@ -1,8 +1,10 @@
 # Buttery.js
 
-A lightweight, performance-focused scroll animation library. Based on [basicScroll](https://github.com/electerious/basicScroll) by Tobias Reich, customised by @croxton.
+A lightweight, performance-focused scroll animation library. Based on [basicScroll](https://github.com/electerious/basicScroll) by Tobias Reich.
 
-When the browser supports it, the library uses native **scroll-driven animations** (`ScrollTimeline` + Web Animations API). Otherwise it falls back to an event-driven `requestAnimationFrame` loop. Either way, you use the same API.
+When the browser supports it, the library uses native **scroll-driven animations** (`ScrollTimeline` + Web Animations API). Otherwise it falls back to an event-driven `requestAnimationFrame` loop. Either way, you use the same API. 
+
+Alternatively, if you already use [Lenis](https://github.com/darkroomengineering/lenis) for smooth scrolling, instances can be driven by Lenis directly instead of the native timeline or rAF loop.
 
 ## Contents
 
@@ -116,6 +118,7 @@ Adds the scroll, resize, orientation and `pageshow` listeners, plus a `ResizeObs
 |---|---|---|---|
 | `recalculateOnResize` | `Boolean` | `false` | Call `calculate()` on every instance with `track: true` when the viewport **width** changes |
 | `timeline` | `Boolean` | `true` | Allow native scroll timelines. `false` forces the JavaScript fallback for every instance |
+| `lenis` | `Lenis` | `null` | A [Lenis](https://github.com/darkroomengineering/lenis) instance. Drives instances that use `timeline: 'lenis'`. See [Lenis](#lenis) |
 
 ```javascript
 buttery.mount({ recalculateOnResize: true })
@@ -123,7 +126,7 @@ buttery.mount({ recalculateOnResize: true })
 
 #### `unmount()`
 
-Removes all listeners and cancels pending frames. Destroys instances whose `elem` is no longer in the DOM. If no instances are left, the internal instance list is reset.
+Removes all listeners (including the Lenis `scroll` subscription) and cancels pending frames. Destroys instances whose `elem` is no longer in the DOM. If no instances are left, the internal instance list is reset.
 
 #### `create(data)`
 
@@ -151,6 +154,7 @@ if (buttery.supportsTimeline()) {
 | `isActive()` | Returns `true` if the instance is started |
 | `getData()` | Returns the parsed data |
 | `usesTimeline()` | Returns `true` if the instance runs on a native scroll timeline |
+| `usesLenis()` | Returns `true` if the instance is driven by the Lenis instance passed to `mount()` |
 | `syncTimeline()` | Rebuilds the native keyframes for the current scroll range. Called automatically when the page height changes |
 
 To recalculate after a layout change:
@@ -172,7 +176,7 @@ instance.update()
 | `props` | `Object` | `{}` | Properties to animate. See [Props](#props) |
 | `inside` | `Function` | — | `(instance, percentage, props) => {}`. Runs while the scroll position is between `from` and `to` |
 | `outside` | `Function` | — | `(instance, percentage, props) => {}`. Runs while it's outside that range |
-| `timeline` | `'auto'\|Boolean` | `'auto'` | Rendering mode. See [Rendering modes](#rendering-modes) |
+| `timeline` | `'auto'\|Boolean\|'lenis'` | `'auto'` | Rendering mode. See [Rendering modes](#rendering-modes) |
 
 ### Relative values
 
@@ -215,7 +219,7 @@ Keys can be CSS custom properties (`--ty`) or normal CSS properties (`opacity`, 
 
 ## Rendering modes
 
-Each instance runs in one of two modes:
+Each instance runs in one of three modes:
 
 ### Native timeline
 
@@ -225,6 +229,32 @@ The instance's range and props are turned into keyframes on a Web Animation link
 
 A passive `scroll` listener schedules at most one `requestAnimationFrame` update per frame. Values are calculated for every active instance first, then only the changed values are written.
 
+### Lenis
+
+When you smooth-scroll with [Lenis](https://github.com/darkroomengineering/lenis), pass your Lenis instance to `mount()` and set `timeline: 'lenis'` on the instances it should drive:
+
+```javascript
+const lenis = new Lenis({ autoRaf: true })
+
+buttery.mount({ lenis })
+
+buttery.create({
+  elem: document.querySelector('.element'),
+  from: 'top-bottom',
+  to: 'bottom-top',
+  direct: true,
+  timeline: 'lenis',
+  props: { '--ty': { from: '0px', to: '-100px' } }
+}).start()
+```
+
+These instances update inside Lenis's own frame, straight from its `scroll` event, using its sub-pixel scroll position. The JavaScript fallback waits for the browser's `scroll` event and the next animation frame, and only sees the rounded `scrollTop`, so it can lag a frame behind Lenis and step. `inside`/`outside` callbacks run on every Lenis frame.
+
+- Lenis isn't a dependency: Buttery only calls `lenis.on('scroll', …)` and reads `lenis.scroll` and `lenis.limit`.
+- Only Lenis on the page (window) scroller is supported, not a custom `wrapper`.
+- If no Lenis instance is passed to `mount()`, `timeline: 'lenis'` instances use the JavaScript fallback. So the same code works when Lenis is turned off, for example on touch devices.
+- Native timelines already follow Lenis, because Lenis sets the real scroll position. Use `'lenis'` for instances that need JavaScript, such as those with callbacks, or for browsers without `ScrollTimeline`.
+
 ### Choosing a mode
 
 | `data.timeline` | Behaviour |
@@ -232,6 +262,7 @@ A passive `scroll` listener schedules at most one `requestAnimationFrame` update
 | `'auto'` (default) | Uses the timeline if the browser supports it **and** the instance has no `inside`/`outside` callbacks |
 | `true` | Uses the timeline whenever supported. Callbacks only run when `update()` is called |
 | `false` | Always uses the JavaScript fallback |
+| `'lenis'` | Driven by the Lenis instance passed to `mount()`. Uses the JavaScript fallback if there isn't one |
 
 An instance also falls back to JavaScript automatically if a custom property can't be registered, or if creating the animation throws an error.
 
@@ -292,7 +323,7 @@ Vite builds `lib/buttery.js` twice (see `vite.config.js`):
 npm run demo
 ```
 
-Add `?js` to the URL to force the JavaScript fallback and compare it with native timelines.
+Add `?js` to the URL to force the JavaScript fallback, or `?lenis` to smooth-scroll with Lenis and drive every instance from it.
 
 ## Tips
 
