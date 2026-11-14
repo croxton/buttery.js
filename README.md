@@ -119,6 +119,7 @@ Adds the scroll, resize, orientation and `pageshow` listeners, plus a `ResizeObs
 | `recalculateOnResize` | `Boolean` | `false` | Call `calculate()` on every instance with `track: true` when the viewport **width** changes |
 | `timeline` | `Boolean` | `true` | Allow native scroll timelines. `false` forces the JavaScript fallback for every instance |
 | `lenis` | `Lenis` | `null` | A [Lenis](https://github.com/darkroomengineering/lenis) instance. Drives instances that use `timeline: 'lenis'`. See [Lenis](#lenis) |
+| `nativeOnTouch` | `Boolean` | `true` | On touch devices, run `timeline: 'lenis'` instances on native timelines unless Lenis smooths touch scrolling (`syncTouch`). See [On touch devices](#on-touch-devices) |
 
 ```javascript
 buttery.mount({ recalculateOnResize: true })
@@ -255,6 +256,21 @@ These instances update inside Lenis's own frame, straight from its `scroll` even
 - If no Lenis instance is passed to `mount()`, `timeline: 'lenis'` instances use the JavaScript fallback. So the same code works when Lenis is turned off, for example on touch devices.
 - Native timelines already follow Lenis, because Lenis sets the real scroll position. Use `'lenis'` for instances that need JavaScript, such as those with callbacks, or for browsers without `ScrollTimeline`.
 
+#### On touch devices
+
+By default Lenis doesn't smooth touch scrolling: the browser scrolls natively and Lenis only passes on its `scroll` events. JavaScript reacting to those events lags behind the scrolling, which is easy to see as jitter in iOS Safari.
+
+So on touch-first devices (`(hover: none) and (pointer: coarse)`), `'lenis'` instances use a native timeline when the browser supports it, just like `'auto'`. Instances with `inside`/`outside` callbacks, and browsers without `ScrollTimeline`, still follow Lenis. Turn this off with `mount({ lenis, nativeOnTouch: false })`.
+
+If you'd rather Lenis drove touch scrolling too, create it with `syncTouch`. Lenis then animates touch scrolling itself, and `'lenis'` instances update in its frame on touch devices as well:
+
+```javascript
+const lenis = new Lenis({ autoRaf: true, syncTouch: true })
+buttery.mount({ lenis })
+```
+
+This replaces Safari's own scroll momentum with Lenis's, which feels different, and Lenis notes that `syncTouch` can be less reliable on iOS. Try both on a real device.
+
 ### Choosing a mode
 
 | `data.timeline` | Behaviour |
@@ -262,7 +278,7 @@ These instances update inside Lenis's own frame, straight from its `scroll` even
 | `'auto'` (default) | Uses the timeline if the browser supports it **and** the instance has no `inside`/`outside` callbacks |
 | `true` | Uses the timeline whenever supported. Callbacks only run when `update()` is called |
 | `false` | Always uses the JavaScript fallback |
-| `'lenis'` | Driven by the Lenis instance passed to `mount()`. Uses the JavaScript fallback if there isn't one |
+| `'lenis'` | Driven by the Lenis instance passed to `mount()`. Uses the JavaScript fallback if there isn't one. On touch devices, uses the native timeline unless Lenis has `syncTouch` (see [On touch devices](#on-touch-devices)) |
 
 An instance also falls back to JavaScript automatically if a custom property can't be registered, or if creating the animation throws an error.
 
@@ -323,7 +339,7 @@ Vite builds `lib/buttery.js` twice (see `vite.config.js`):
 npm run demo
 ```
 
-Add `?js` to the URL to force the JavaScript fallback, or `?lenis` to smooth-scroll with Lenis and drive every instance from it.
+Add `?js` to the URL to force the JavaScript fallback, or `?lenis` to smooth-scroll with Lenis and drive every instance from it. Add `&synctouch` to also smooth touch scrolling with Lenis (`?lenis&synctouch`).
 
 ## Tips
 

@@ -19,7 +19,15 @@
     </symbol>
   </svg>
 
-  <a class="badge" id="badge" href="?js">Checking…</a>
+  <nav class="badge" id="badge" aria-label="Rendering mode">
+    <div class="badge__links">
+      <a href="./" data-choice="native">Native</a>
+      <a href="?js" data-choice="js">JS</a>
+      <a href="?lenis" data-choice="lenis">Lenis</a>
+      <a href="?lenis&amp;synctouch" data-choice="synctouch">Lenis touch</a>
+    </div>
+    <span class="badge__status">Checking…</span>
+  </nav>
 
   <!-- 1. Sky with parallax clouds -->
   <header class="scene sky" id="sky">

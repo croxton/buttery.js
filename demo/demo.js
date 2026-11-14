@@ -2,6 +2,7 @@
 (function () {
   const $ = (selector) => document.querySelector(selector)
   const badge = $('#badge')
+  const status = $('.badge__status')
 
   // Grass blades drawn as an SVG background tile, so each layer is one plain <div>
   function grassTile(color, blades) {
@@ -22,12 +23,16 @@
   // ?js forces the JavaScript fallback, ?lenis smooth-scrolls with Lenis and drives every instance from it
   const params = new URLSearchParams(location.search)
   const useLenis = params.has('lenis')
+  const syncTouch = params.has('synctouch')
   const forceJs = params.has('js') && !useLenis
+
+  // Highlight the requested mode. The status line shows what actually runs.
+  const choice = useLenis ? (syncTouch ? 'synctouch' : 'lenis') : forceJs ? 'js' : 'native'
+  badge.querySelector(`[data-choice="${choice}"]`).setAttribute('aria-current', 'page')
 
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     badge.dataset.mode = 'off'
-    badge.textContent = 'Reduced motion: animations off'
-    badge.removeAttribute('href')
+    status.textContent = 'Reduced motion: animations off'
     $('.layers__front').style.opacity = 1
     return
   }
@@ -41,7 +46,7 @@
 
     const script = document.createElement('script')
     script.src = LENIS + 'lenis.min.js'
-    script.onload = () => run(new Lenis({ autoRaf: true }))
+    script.onload = () => run(new Lenis({ autoRaf: true, syncTouch }))
     script.onerror = () => run(null)
     document.head.append(script)
   } else {
@@ -147,18 +152,16 @@
     const instances = configs.map((config) => buttery.create(lenis ? { ...config, timeline: 'lenis' } : config))
     instances.forEach((instance) => instance.start())
 
-    // Badge cycles: native → JS → Lenis → native
+    // What actually runs (e.g. Lenis instances use native timelines on touch devices)
     const native = instances.every((instance) => instance.usesTimeline())
     const driven = instances.every((instance) => instance.usesLenis())
     const mode = driven ? 'lenis' : native ? 'native' : 'js'
     badge.dataset.mode = mode
-    badge.textContent = {
-      native: 'Native ScrollTimeline · try JS',
-      js: 'JS fallback · try Lenis',
-      lenis: `Lenis${buttery.supportsTimeline() ? ' · try native' : ' · try JS'}`
+    status.textContent = {
+      native: lenis ? 'Running: native timelines on touch' : 'Running: native timelines',
+      js: 'Running: JS fallback',
+      lenis: lenis && lenis.options.syncTouch ? 'Running: Lenis with syncTouch' : 'Running: Lenis'
     }[mode]
-    badge.href = mode === 'js' ? '?lenis' : mode === 'lenis' ? './' : '?js'
-    badge.title = 'Switch rendering mode'
 
   }
 })()

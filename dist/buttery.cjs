@@ -38,6 +38,7 @@ eases = __toESM(eases, 1);
 * - Instances with `inside`/`outside` callbacks use the fallback by default (callbacks need JS per frame).
 * - Optional 'lenis' mode: instances update synchronously from a Lenis instance's `scroll` event,
 *   using its sub-pixel scroll position, instead of the window scroll listener.
+*   On touch devices where Lenis doesn't smooth touch (no `syncTouch`), they use native timelines instead.
 * - Clamps scrollTop to avoid rubber-band (overscroll) bounce affecting animations
 * - Uses a stable viewport height that doesn't change when the iOS toolbar collapses/expands
 * - Ignores height-only resize events (iOS address bar show/hide) for recalculation
@@ -61,7 +62,8 @@ var timelineSupport = null;
 var settings = {
 	recalculateOnResize: false,
 	timeline: true,
-	lenis: null
+	lenis: null,
+	nativeOnTouch: true
 };
 var TIMELINE_SAMPLES = 30;
 var styleCache = /* @__PURE__ */ new WeakMap();
@@ -87,7 +89,7 @@ var debounce = function(fn, duration) {
 * @returns {Boolean}
 */
 var isLenisDriven = function(instance) {
-	return init === true && settings.lenis != null && instance.getData().timeline === "lenis";
+	return init === true && settings.lenis != null && instance.getData().timeline === "lenis" && instance.usesTimeline() === false;
 };
 /**
 * Returns all active instances that are driven by the JS loop (window scroll listener).
@@ -530,6 +532,19 @@ var toKeyframeKey = function(key) {
 	return key.replace(/-([a-z])/g, (match, char) => char.toUpperCase());
 };
 /**
+* Checks if a 'lenis' instance should use a native timeline instead.
+* Lenis only smooths touch scrolling with `syncTouch`. Without it, touch scrolling is native,
+* and a native timeline follows it more smoothly than JS reacting to scroll events (e.g. iOS Safari).
+* @returns {Boolean}
+*/
+var prefersNativeForLenis = function() {
+	if (settings.nativeOnTouch !== true) return false;
+	if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+	const touchFirst = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+	const lenisSyncsTouch = settings.lenis != null && settings.lenis.options != null && settings.lenis.options.syncTouch === true;
+	return touchFirst && lenisSyncsTouch === false;
+};
+/**
 * Checks if an instance can use a native scroll timeline.
 * @param {Object} data
 * @param {Array} animatedKeys
@@ -538,7 +553,7 @@ var toKeyframeKey = function(key) {
 var canUseTimeline = function(data, animatedKeys) {
 	if (settings.timeline === false) return false;
 	if (data.timeline === false) return false;
-	if (data.timeline === "lenis") return false;
+	if (data.timeline === "lenis" && (data.hasCallbacks === true || prefersNativeForLenis() === false)) return false;
 	if (data.timeline === "auto" && data.hasCallbacks === true) return false;
 	if (supportsTimeline() === false) return false;
 	return animatedKeys.every((key) => {
@@ -786,6 +801,8 @@ var create = function(data) {
 * @param {?Boolean} options.recalculateOnResize - Recalculate tracked instances when the viewport width changes.
 * @param {?Boolean} options.timeline - Allow native scroll-driven animations (default true).
 * @param {?Object} options.lenis - A Lenis instance that drives instances with `timeline: 'lenis'`.
+* @param {?Boolean} options.nativeOnTouch - Use native timelines for 'lenis' instances on touch devices
+*   when Lenis doesn't smooth touch scrolling (default true).
 */
 var mount = function(options = {}) {
 	if (init) return;
@@ -809,6 +826,7 @@ var mount = function(options = {}) {
 		onPageShow,
 		offLenis: null
 	};
+	for (const instance of instances) if (instance != null && instance.getData().timeline === "lenis") instance.calculate();
 	const lenis = settings.lenis;
 	if (lenis != null) {
 		if (typeof lenis.on !== "function") throw new Error("Option `lenis` must be a Lenis instance");
