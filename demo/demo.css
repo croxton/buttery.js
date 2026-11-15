@@ -4,7 +4,7 @@
   --meadow: #7cc36b;
   --ink: #1d2b36;
   --muted: #4a5b68;
-  --card: rgb(255 255 255 / 0.82);
+  --card: rgb(255 255 255 / 0.9);
   --code-bg: #1d2b36;
   --code-ink: #e6f1f8;
   font-family: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -58,9 +58,9 @@ pre {
   max-width: min(34rem, 100%);
   padding: 20px;
   border-radius: 16px;
+  /* No backdrop-filter: with layers animating behind the panel, the blur is redone
+     every frame and roughly triples the GPU work per frame on large screens. */
   background: var(--card);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
 }
 .caption p { color: var(--muted); }
 
