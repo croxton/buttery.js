@@ -17,6 +17,8 @@ Alternatively, if you already use [Lenis](https://github.com/darkroomengineering
     - [Instance](#instance)
 - [Data](#data)
 - [Props](#props)
+- [Breakpoints](#breakpoints)
+- [Declarative HTML](#declarative-html)
 - [Rendering modes](#rendering-modes)
 - [Custom properties and `@property`](#custom-properties-and-property)
 - [iOS Safari](#ios-safari)
@@ -41,6 +43,8 @@ Alternatively, if you already use [Lenis](https://github.com/darkroomengineering
 | Style writes | Every frame | Only when a value changes; all reads happen before writes |
 | Zero-length ranges | Division by zero | Handled |
 | Back/forward cache | Not handled | Refreshes on `pageshow` |
+| Responsive | Same config at every size | [Breakpoint](#breakpoints) overrides (Tailwind names by default), re-applied live |
+| Setup | JavaScript only | Also [`data-buttery` attributes](#declarative-html) in HTML |
 
 ## Requirements
 
@@ -121,6 +125,7 @@ Adds the scroll, resize, orientation and `pageshow` listeners, plus a `ResizeObs
 | `timeline` | `Boolean` | `true` | Allow native scroll timelines. `false` forces the JavaScript fallback for every instance |
 | `lenis` | `Lenis` | `null` | A [Lenis](https://github.com/darkroomengineering/lenis) instance. Drives instances that use `timeline: 'lenis'`. See [Lenis](#lenis) |
 | `nativeOnTouch` | `Boolean` | `true` | On touch devices, run `timeline: 'lenis'` instances on native timelines unless Lenis smooths touch scrolling (`syncTouch`). See [On touch devices](#on-touch-devices) |
+| `breakpoints` | `Object` | Tailwind's | Breakpoint names and min-widths. See [Breakpoints](#breakpoints) |
 
 ```javascript
 buttery.mount({ recalculateOnResize: true })
@@ -133,6 +138,25 @@ Removes all listeners (including the Lenis `scroll` subscription) and cancels pe
 #### `create(data)`
 
 Creates and returns an instance. Its `from`/`to` positions are calculated straight away. Nothing animates until `instance.start()` is called.
+
+#### `scan(root?, options?)`
+
+Creates and starts instances for elements with [`data-buttery` attributes](#declarative-html) in `root` (default `document`), including `root` itself. Returns the new instances.
+
+- Elements that were scanned before are skipped, so it's safe to call again after new content is added.
+- Instances of elements that have left the document are destroyed.
+- Other instances are recalculated in the next frame, as new or removed content moves what comes after it.
+- Elements with invalid attributes are skipped with a `console.warn`.
+- Nothing is created when the user prefers reduced motion.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `defaults` | `Object` | `{}` | Data merged under every element's config, e.g. `{ timeline: 'lenis' }` |
+| `reducedMotion` | `Boolean` | `false` | Animate even when the user prefers reduced motion |
+
+#### `release(root?)`
+
+Destroys the instances `scan()` created for `root` and its descendants, e.g. before removing them.
 
 #### `supportsTimeline()`
 
@@ -251,6 +275,128 @@ props: { '--ty': { from: '0px', to: '-100px' } }   // with .el { transform: tran
 Browsers can't run custom-property animations on the compositor, so they're recalculated on the main thread every frame. A busy main thread (scripts, image decoding) then makes them stutter. Animating `translate` and the like directly lets browsers that support it (such as Chrome) run the scroll-driven animation on the compositor.
 
 `translate`, `rotate` and `scale` are separate properties, so different instances can animate them on the same element without overwriting each other. They combine with the element's `transform`, so use them on elements that don't need custom-property transforms. Custom properties still work as before. Use them when one value feeds several properties, or for anything the compositor can't animate.
+
+## Breakpoints
+
+Data and props can change with the viewport width. Breakpoints are mobile-first, like Tailwind: an `md` override applies from the `md` width up. A `max-md` override applies below it.
+
+```javascript
+buttery.create({
+  elem, from: 'top-bottom', to: 'bottom-top',
+  lg: { to: 'bottom-middle' },      // a different range from lg up
+  'max-sm': false,                  // turned off below sm
+  props: {
+    translate: {
+      from: '0 0px', to: '0 -100px',
+      md: { to: '0 -300px' }        // further from md up
+    },
+    rotate: { from: '0deg', to: '10deg', xl: false }  // no rotation from xl up
+  }
+})
+```
+
+- Overrides are merged over the base values: matching `max-*` overrides first (largest first), then matching min-width overrides (smallest first). Later ones win.
+- Instance overrides can set `from`, `to`, `timeline`, `direct` and `props`. Their `props` merge with the instance's props, one prop at a time.
+- `false` turns the instance or prop off: its inline styles are removed and its native animation is cancelled. A later object override turns it on again, so `md: false, xl: {}` is off from `md` to `xl`.
+- A prop with no `from`/`to` of its own is off until an override gives it values: `rotate: { md: { from: '0deg', to: '10deg' } }` only rotates from `md` up.
+- Overrides are re-applied as soon as the viewport crosses a breakpoint, with no need for `recalculateOnResize`.
+
+The default breakpoints are Tailwind CSS's:
+
+| Name | Min width |
+|---|---|
+| `sm` | `40rem` (640px) |
+| `md` | `48rem` (768px) |
+| `lg` | `64rem` (1024px) |
+| `xl` | `80rem` (1280px) |
+| `2xl` | `96rem` (1536px) |
+
+Use your own with `mount()`. Numbers are pixels, strings are CSS lengths:
+
+```javascript
+buttery.mount({ breakpoints: { tablet: 600, desktop: '75rem' } })
+```
+
+Call `mount()` before `scan()` when you use your own breakpoints, so the attribute names are read with them. Names can't be option names such as `from`, `to` or `props`, or start with `max-`.
+
+## Declarative HTML
+
+Animations can be added in HTML instead of JavaScript, then created with `scan()`:
+
+```html
+<img class="cow"
+     data-buttery="from: top-bottom; to: bottom-top"
+     data-buttery-translate="0 0px | 0 -100px; timing: quadIn"
+     data-buttery-translate-md="0 0px | 0 -300px"
+     data-buttery-rotate="-5deg | 5deg"
+     data-buttery-opacity="0 | 1; to: 50%-40%">
+```
+
+```javascript
+buttery.mount()
+buttery.scan()
+```
+
+### `data-buttery`
+
+Required. Holds the instance options as `key: value` pairs separated by `;`. All are optional:
+
+| Option | Default | Description |
+|---|---|---|
+| `from` | `top-bottom` | Where the animation starts |
+| `to` | `bottom-top` | Where it ends |
+| `elem` | the element | A selector for the element to measure. The closest matching ancestor is used, otherwise the first match in the document |
+| `timeline` | `auto` | `auto`, `true`, `false` or `lenis` |
+| `track` | `true` | `true` or `false` |
+
+Styles are always applied to the element with the attributes. Measuring the element itself works unless the element **moves itself**: `getBoundingClientRect()` includes its transform. In that case, point `elem` at an ancestor that doesn't move, e.g. `elem: section`. Before measuring, the library removes the styles and animations it applied to the measured element, so recalculating doesn't make positions drift. Even so, an element that starts far from where it sits in the layout is measured more reliably through a static ancestor.
+
+### Props
+
+Each prop is an attribute: `data-buttery-<prop>="from | to"` or `"from | via | to"`. Options follow after `;`:
+
+| Option | Description |
+|---|---|
+| `timing` | An [eases](https://www.npmjs.com/package/eases) name |
+| `from`, `to` | A range for this prop only. The prop gets its own instance, so it can animate over a different part of the scroll than the others |
+| `prop` | The property name, when the attribute name can't express it (see below) |
+
+Custom properties work too: `data-buttery---ty="0px | -100px"`. `|` and `;` inside brackets are ignored, so `translate(0, 10px) | translate(0, -10px)` works.
+
+### Breakpoints in HTML
+
+Add the breakpoint name to the end of an attribute:
+
+```html
+<div data-buttery
+     data-buttery-max-sm="off"
+     data-buttery-md="to: bottom-middle"
+     data-buttery-translate="0 0px | 0 -100px"
+     data-buttery-translate-md="0 0px | 0 -300px"
+     data-buttery-rotate-lg="off">
+```
+
+- `data-buttery-<breakpoint>` overrides instance options (`from`, `to`, `timeline`).
+- `data-buttery-<prop>-<breakpoint>` overrides a prop. An override can't change just one value, so give both `from | to`.
+- `off` turns the instance or prop off at that breakpoint.
+- A prop that only has breakpoint attributes is off below them.
+
+HTML lowercases attribute names, and a name ending in a breakpoint name is read as a breakpoint override. For a custom property like `--gap-lg` or `--myVar`, name the attribute anything and set `prop`:
+
+```html
+<div data-buttery data-buttery-gap="0px | 20px; prop: --gap-lg">
+```
+
+A registered custom property that's turned off falls back to its registered initial value, not to a `var()` fallback.
+
+### With htmx (or other partial page updates)
+
+```javascript
+document.body.addEventListener('htmx:beforeSwap', (e) => buttery.release(e.detail.target))
+document.body.addEventListener('htmx:afterSettle', (e) => buttery.scan(e.detail.elt))
+```
+
+`scan()` also destroys the instances of elements that are no longer in the document, so `release()` is only needed to stop animations before the swap.
 
 ## Rendering modes
 
@@ -384,4 +530,4 @@ Add `?js` to the URL to force the JavaScript fallback, or `?lenis` to smooth-scr
 - **Animate HTML elements, not SVG children.** WebKit doesn't give SVG `<path>` elements their own GPU layer, so animating them repaints the whole SVG.
 - **Avoid animating `filter: blur()`** and avoid putting scroll-driven elements inside `mask: url(#…)` on mobile. Both force software repaints.
 - **Call `calculate()` after layout changes** that move elements, such as content loading in or temporary `position: sticky` changes. Changes to page height alone are picked up automatically.
-- **Respect reduced motion.** Check `prefers-reduced-motion` before calling `create()`.
+- **Respect reduced motion.** Check `prefers-reduced-motion` before calling `create()`. `scan()` does this for you.

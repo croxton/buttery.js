@@ -1,5 +1,264 @@
 import parseUnit from "parse-unit";
 import eases from "eases";
+// lib/attributes.js
+/**
+* Parses declarative `data-buttery*` attributes into configs for `create()`.
+*
+* <div data-buttery="from: top-bottom; to: bottom-top"
+*      data-buttery-md="to: bottom-middle"
+*      data-buttery-translate="0 0px | 0 -100px; timing: quadIn"
+*      data-buttery-translate-md="0 0px | 0 -300px"
+*      data-buttery-opacity="0 | 1; to: 50%-40%">
+*/
+var PREFIX = "data-buttery";
+var INSTANCE_OPTIONS = [
+	"from",
+	"to",
+	"elem",
+	"timeline",
+	"track"
+];
+var BREAKPOINT_INSTANCE_OPTIONS = [
+	"from",
+	"to",
+	"timeline"
+];
+var PROP_OPTIONS = [
+	"timing",
+	"from",
+	"to",
+	"prop"
+];
+/**
+* Splits a string on a separator, ignoring separators inside (), [] and quotes.
+* @param {String} string
+* @param {String} separator - A single character.
+* @returns {Array}
+*/
+var splitTopLevel = function(string, separator) {
+	const parts = [];
+	let depth = 0;
+	let quote = null;
+	let start = 0;
+	for (let i = 0; i < string.length; i++) {
+		const char = string[i];
+		if (quote != null) {
+			if (char === quote) quote = null;
+		} else if (char === "\"" || char === "'") quote = char;
+		else if (char === "(" || char === "[") depth++;
+		else if (char === ")" || char === "]") depth = Math.max(0, depth - 1);
+		else if (char === separator && depth === 0) {
+			parts.push(string.slice(start, i));
+			start = i + 1;
+		}
+	}
+	parts.push(string.slice(start));
+	return parts;
+};
+/**
+* Parses `key: value` pairs. Splits on the first colon only, so values can contain colons.
+* @param {Array} segments
+* @param {Array} allowed - Allowed keys.
+* @param {String} context - For error messages.
+* @returns {Object}
+*/
+var parsePairs = function(segments, allowed, context) {
+	const options = {};
+	for (const segment of segments) {
+		const trimmed = segment.trim();
+		if (trimmed === "") continue;
+		const colon = trimmed.indexOf(":");
+		if (colon === -1) throw new Error(`Expected "key: value" in ${context}, got "${trimmed}"`);
+		const key = trimmed.slice(0, colon).trim().toLowerCase();
+		const value = trimmed.slice(colon + 1).trim();
+		if (allowed.includes(key) === false) throw new Error(`Unknown option "${key}" in ${context}`);
+		options[key] = value;
+	}
+	return options;
+};
+/**
+* Parses a boolean option.
+* @param {String} value
+* @param {String} key
+* @returns {Boolean}
+*/
+var parseBoolean = function(value, key) {
+	if (value === "true" || value === "") return true;
+	if (value === "false") return false;
+	throw new Error(`Option "${key}" must be true or false`);
+};
+/**
+* Parses the `timeline` option.
+* @param {String} value
+* @returns {String|Boolean}
+*/
+var parseTimeline = function(value) {
+	if (value === "auto" || value === "lenis") return value;
+	return parseBoolean(value, "timeline");
+};
+/**
+* Parses instance options (`data-buttery` and `data-buttery-<bp>`).
+* @param {String} value
+* @param {Array} allowed
+* @param {String} context
+* @returns {Object|false}
+*/
+var parseInstanceOptions = function(value, allowed, context) {
+	if (value.trim() === "off") return false;
+	const options = parsePairs(splitTopLevel(value, ";"), allowed, context);
+	if (options.timeline != null) options.timeline = parseTimeline(options.timeline);
+	if (options.track != null) options.track = parseBoolean(options.track, "track");
+	return options;
+};
+/**
+* Parses a prop attribute: `from | to` or `from | via | to`, then `; option: value` pairs.
+* The values can be left out, e.g. `; to: bottom-top` only changes the range.
+* @param {String} value
+* @param {String} context
+* @returns {Object|false} { values, timing, range, prop }
+*/
+var parsePropAttribute = function(value, context) {
+	if (value.trim() === "off") return false;
+	const segments = splitTopLevel(value, ";");
+	const result = {
+		values: null,
+		timing: null,
+		range: {},
+		prop: null
+	};
+	if (splitTopLevel(segments[0], "|").length > 1) {
+		const values = splitTopLevel(segments.shift(), "|").map((part) => part.trim());
+		if (values.length > 3 || values.some((part) => part === "")) throw new Error(`Expected "from | to" or "from | via | to" in ${context}`);
+		result.values = values.length === 3 ? {
+			from: values[0],
+			via: values[1],
+			to: values[2]
+		} : {
+			from: values[0],
+			via: null,
+			to: values[1]
+		};
+	}
+	const options = parsePairs(segments, PROP_OPTIONS, context);
+	if (options.timing != null) result.timing = options.timing;
+	if (options.prop != null) result.prop = options.prop;
+	if (options.from != null) result.range.from = options.from;
+	if (options.to != null) result.range.to = options.to;
+	return result;
+};
+/**
+* Converts a parsed prop attribute to a prop (or prop override) object.
+* @param {Object|false} parsed
+* @returns {Object|false}
+*/
+var toProp = function(parsed) {
+	if (parsed === false) return false;
+	const prop = {};
+	if (parsed.values != null) Object.assign(prop, parsed.values);
+	if (parsed.timing != null) prop.timing = parsed.timing;
+	return prop;
+};
+/**
+* Finds the element used to measure the range.
+* @param {Element} el
+* @param {String} selector
+* @returns {Element}
+*/
+var findElem = function(el, selector) {
+	let elem = null;
+	try {
+		elem = el.closest(selector) || el.ownerDocument.querySelector(selector);
+	} catch (error) {
+		throw new Error(`Invalid elem selector "${selector}"`);
+	}
+	if (elem == null) throw new Error(`No element matches elem selector "${selector}"`);
+	return elem;
+};
+/**
+* Parses the data-buttery attributes of an element.
+* @param {Element} el
+* @param {Array} breakpointNames - Configured breakpoint names, e.g. ['sm', 'md'].
+* @returns {Array} Configs for create(), with nested breakpoint keys.
+*/
+var parseElement = function(el, breakpointNames) {
+	const suffixes = [...breakpointNames, ...breakpointNames.map((name) => `max-${name}`)].sort((a, b) => b.length - a.length);
+	const base = parseInstanceOptions(el.getAttribute("data-buttery") || "", INSTANCE_OPTIONS, `${PREFIX}`);
+	if (base === false) return [];
+	const instanceOverrides = {};
+	const groups = /* @__PURE__ */ new Map();
+	for (const attr of Array.from(el.attributes)) {
+		if (attr.name.startsWith(`data-buttery-`) === false) continue;
+		const rest = attr.name.slice(13);
+		const context = attr.name;
+		if (suffixes.includes(rest)) {
+			instanceOverrides[rest] = parseInstanceOptions(attr.value, BREAKPOINT_INSTANCE_OPTIONS, context);
+			continue;
+		}
+		let name = rest;
+		let breakpoint = null;
+		for (const suffix of suffixes) if (rest.length > suffix.length + 1 && rest.endsWith(`-${suffix}`)) {
+			name = rest.slice(0, -(suffix.length + 1));
+			breakpoint = suffix;
+			break;
+		}
+		if (groups.has(name) === false) groups.set(name, {
+			base: null,
+			overrides: {}
+		});
+		const group = groups.get(name);
+		const parsed = parsePropAttribute(attr.value, context);
+		if (breakpoint == null) group.base = parsed;
+		else group.overrides[breakpoint] = parsed;
+	}
+	if (groups.size === 0) throw new Error("No props: add at least one data-buttery-<prop> attribute");
+	const common = {
+		from: base.from || "top-bottom",
+		to: base.to || "bottom-top"
+	};
+	if (base.timeline != null) common.timeline = base.timeline;
+	if (base.track != null) common.track = base.track;
+	if (base.elem != null) {
+		common.elem = findElem(el, base.elem);
+		common.direct = common.elem === el ? true : el;
+	} else {
+		common.elem = el;
+		common.direct = true;
+	}
+	const shared = { props: {} };
+	const configs = [];
+	for (const [name, group] of groups) {
+		const parsedList = [group.base, ...Object.values(group.overrides)].filter((parsed) => parsed !== false && parsed != null);
+		const key = parsedList.map((parsed) => parsed.prop).find((prop) => prop != null) || name;
+		const prop = group.base ? toProp(group.base) : {};
+		for (const breakpoint in group.overrides) prop[breakpoint] = toProp(group.overrides[breakpoint]);
+		const rangeKeys = ["from", "to"].filter((rangeKey) => parsedList.some((parsed) => parsed.range[rangeKey] != null));
+		if (rangeKeys.length === 0) {
+			shared.props[key] = prop;
+			continue;
+		}
+		const config = Object.assign({}, common, { props: { [key]: prop } });
+		if (group.base) Object.assign(config, group.base.range);
+		for (const breakpoint in instanceOverrides) {
+			const override = instanceOverrides[breakpoint];
+			if (override === false) {
+				config[breakpoint] = false;
+				continue;
+			}
+			const filtered = Object.assign({}, override);
+			for (const rangeKey of rangeKeys) delete filtered[rangeKey];
+			config[breakpoint] = filtered;
+		}
+		for (const breakpoint in group.overrides) {
+			const parsed = group.overrides[breakpoint];
+			if (parsed === false || Object.keys(parsed.range).length === 0) continue;
+			if (config[breakpoint] === false) continue;
+			config[breakpoint] = Object.assign({}, config[breakpoint], parsed.range);
+		}
+		configs.push(config);
+	}
+	if (Object.keys(shared.props).length > 0) configs.unshift(Object.assign({}, common, instanceOverrides, shared));
+	return configs;
+};
 // lib/buttery.js
 /**
 * Buttery - scroll animation library
@@ -19,8 +278,30 @@ import eases from "eases";
 * - Uses a stable viewport height that doesn't change when the iOS toolbar collapses/expands
 * - Ignores height-only resize events (iOS address bar show/hide) for recalculation
 * - Skips redundant style writes
+* - Breakpoint overrides (`md: {...}`, `'max-md': false`), re-applied when the viewport crosses a breakpoint
+* - Declarative `data-buttery*` attributes, created with scan() and destroyed with release()
 */
-var instances = [];
+var DEFAULT_BREAKPOINTS = {
+	sm: "40rem",
+	md: "48rem",
+	lg: "64rem",
+	xl: "80rem",
+	"2xl": "96rem"
+};
+var RESERVED_KEYS = [
+	"from",
+	"to",
+	"via",
+	"timing",
+	"elem",
+	"props",
+	"direct",
+	"track",
+	"timeline",
+	"inside",
+	"outside"
+];
+var instances = /* @__PURE__ */ new Set();
 var frameId = null;
 var pendingForce = false;
 var init = false;
@@ -39,8 +320,16 @@ var settings = {
 	recalculateOnResize: false,
 	timeline: true,
 	lenis: null,
-	nativeOnTouch: true
+	nativeOnTouch: true,
+	breakpoints: DEFAULT_BREAKPOINTS
 };
+var breakpointList = null;
+var mediaQueries = /* @__PURE__ */ new Map();
+var breakpointFrameId = null;
+var recalculateFrameId = null;
+var declarativeInstances = /* @__PURE__ */ new Set();
+var scannedElements = /* @__PURE__ */ new WeakMap();
+var failedElements = /* @__PURE__ */ new WeakSet();
 var TIMELINE_SAMPLES = 30;
 var styleCache = /* @__PURE__ */ new WeakMap();
 var LAST_TIME = Symbol("lastTime");
@@ -87,7 +376,9 @@ var getLists = function() {
 	const loop = [];
 	const lenis = [];
 	for (const instance of instances) {
-		if (instance == null || instance.isActive() === false || instance.usesTimeline()) continue;
+		if (instance.isActive() === false || instance.usesTimeline()) continue;
+		const data = instance.getData();
+		if (data == null || data.disabled === true) continue;
 		if (isLenisDriven(instance)) lenis.push(instance);
 		else loop.push(instance);
 	}
@@ -98,12 +389,160 @@ var getLists = function() {
 	return lists;
 };
 /**
-* Returns all tracked instances from an array.
-* @param {Array} instances
+* Returns all tracked instances from a list.
+* @param {Iterable} list
 * @returns {Array} instances - Tracked instances.
 */
-var getTrackedInstances = function(instances) {
-	return instances.filter((instance) => instance != null && instance.getData().track);
+var getTrackedInstances = function(list) {
+	return Array.from(list).filter((instance) => instance.getData() != null && instance.getData().track);
+};
+/**
+* Converts a breakpoint value to pixels, for sorting. Numbers are pixels, `rem`/`em` are × 16.
+* @param {Number|String} value
+* @returns {Number}
+*/
+var breakpointToPx = function(value) {
+	if (typeof value === "number") return value;
+	return parseFloat(value) * (/r?em$/.test(String(value).trim()) ? 16 : 1);
+};
+/**
+* Returns the configured breakpoints, smallest first.
+* @returns {Array} [{ name, px, query }]
+*/
+var getBreakpoints = function() {
+	if (breakpointList == null) breakpointList = Object.keys(settings.breakpoints || {}).map((name) => {
+		const value = settings.breakpoints[name];
+		const width = typeof value === "number" ? `${value}px` : String(value).trim();
+		return {
+			name,
+			px: breakpointToPx(value),
+			query: `(min-width: ${width})`
+		};
+	}).sort((a, b) => a.px - b.px);
+	return breakpointList;
+};
+/**
+* Returns the (cached) MediaQueryList of a breakpoint.
+* @param {Object} breakpoint
+* @returns {?MediaQueryList}
+*/
+var getMediaQuery = function(breakpoint) {
+	if (typeof window === "undefined" || typeof window.matchMedia !== "function") return null;
+	let mql = mediaQueries.get(breakpoint.query);
+	if (mql == null) {
+		mql = window.matchMedia(breakpoint.query);
+		mediaQueries.set(breakpoint.query, mql);
+	}
+	return mql;
+};
+/**
+* Checks if the viewport is at least as wide as a breakpoint.
+* @param {Object} breakpoint
+* @returns {Boolean}
+*/
+var matchesBreakpoint = function(breakpoint) {
+	const mql = getMediaQuery(breakpoint);
+	return mql != null && mql.matches;
+};
+/**
+* Checks if a key is a breakpoint key (`md` or `max-md`).
+* @param {String} key
+* @returns {Boolean}
+*/
+var isBreakpointKey = function(key) {
+	return getBreakpoints().some((breakpoint) => key === breakpoint.name || key === `max-${breakpoint.name}`);
+};
+/**
+* Checks if an object is a plain object (not null, not an element).
+* @param {*} value
+* @returns {Boolean}
+*/
+var isPlainObject = function(value) {
+	return value != null && typeof value === "object" && (typeof Node === "undefined" || !(value instanceof Node));
+};
+/**
+* Checks if raw data (or one of its props) has breakpoint keys.
+* @param {Object} raw
+* @returns {Boolean}
+*/
+var hasBreakpointKeys = function(raw) {
+	if (Object.keys(raw).some(isBreakpointKey)) return true;
+	if (isPlainObject(raw.props) === false) return false;
+	return Object.values(raw.props).some((prop) => isPlainObject(prop) && Object.keys(prop).some(isBreakpointKey));
+};
+/**
+* Returns a copy of an object without its breakpoint keys.
+* @param {Object} object
+* @returns {Object}
+*/
+var withoutBreakpointKeys = function(object) {
+	const result = {};
+	for (const key in object) if (isBreakpointKey(key) === false) result[key] = object[key];
+	return result;
+};
+/**
+* Returns the overrides of an object that match the viewport, in the order they apply:
+* matching `max-*` keys (largest first), then matching min-width keys (smallest first).
+* @param {Object} object
+* @returns {Array}
+*/
+var getMatchingOverrides = function(object) {
+	const breakpoints = getBreakpoints();
+	const overrides = [];
+	for (let i = breakpoints.length - 1; i >= 0; i--) {
+		const key = `max-${breakpoints[i].name}`;
+		if (key in object && matchesBreakpoint(breakpoints[i]) === false) overrides.push(object[key]);
+	}
+	for (const breakpoint of breakpoints) if (breakpoint.name in object && matchesBreakpoint(breakpoint)) overrides.push(object[breakpoint.name]);
+	return overrides;
+};
+/**
+* Resolves the breakpoint overrides of a prop.
+* A prop without `from`/`to` at its base is off until an override turns it on.
+* @param {Object|false} prop
+* @returns {?Object} null when the prop is off
+*/
+var resolveProp = function(prop) {
+	if (isPlainObject(prop) === false) return null;
+	const merged = withoutBreakpointKeys(prop);
+	let enabled = merged.from != null || merged.to != null;
+	for (const override of getMatchingOverrides(prop)) if (override === false) enabled = false;
+	else if (isPlainObject(override)) {
+		enabled = true;
+		Object.assign(merged, override);
+	}
+	return enabled ? merged : null;
+};
+/**
+* Resolves the breakpoint overrides of instance data for the current viewport.
+* @param {Object} raw
+* @returns {Object|false} Flat data, or false when the instance is off
+*/
+var resolveBreakpoints = function(raw) {
+	const data = withoutBreakpointKeys(raw);
+	const props = Object.assign({}, raw.props);
+	let enabled = true;
+	for (const override of getMatchingOverrides(raw)) {
+		if (override === false) {
+			enabled = false;
+			continue;
+		}
+		if (isPlainObject(override) === false) continue;
+		enabled = true;
+		const { props: overrideProps, ...rest } = override;
+		Object.assign(data, rest);
+		if (isPlainObject(overrideProps)) for (const key in overrideProps) {
+			const value = overrideProps[key];
+			props[key] = isPlainObject(value) && isPlainObject(props[key]) ? Object.assign({}, props[key], value) : value;
+		}
+	}
+	if (enabled === false) return false;
+	data.props = {};
+	for (const key in props) {
+		const prop = resolveProp(props[key]);
+		if (prop != null) data.props[key] = prop;
+	}
+	return data;
 };
 /**
 * Checks if native scroll-driven animations can be used.
@@ -262,7 +701,7 @@ var isRelativeValue = function(value) {
 */
 var mapDirectToProperty = function(direct, properties) {
 	if (direct === true) return properties.elem;
-	if (direct instanceof HTMLElement) return properties.direct;
+	if (direct instanceof Element) return properties.direct;
 	return properties.global;
 };
 /**
@@ -327,7 +766,7 @@ var validate = function(data = {}) {
 	if (data.to == null) throw new Error("Missing property `to`");
 	if (typeof data.inside !== "function") throw new Error("Property `inside` must be undefined or a function");
 	if (typeof data.outside !== "function") throw new Error("Property `outside` must be undefined or a function");
-	if (typeof data.direct !== "boolean" && !(data.direct instanceof HTMLElement)) throw new Error("Property `direct` must be undefined, a boolean or a DOM element/node");
+	if (typeof data.direct !== "boolean" && !(data.direct instanceof Element)) throw new Error("Property `direct` must be undefined, a boolean or a DOM element/node");
 	if (data.direct === true && data.elem == null) throw new Error("Property `elem` is required when `direct` is true");
 	if (typeof data.track !== "boolean") throw new Error("Property `track` must be undefined or a boolean");
 	if (typeof data.props !== "object") throw new Error("Property `props` must be undefined or an object");
@@ -654,6 +1093,51 @@ var buildKeyframes = function(data, keys, max) {
 	});
 };
 /**
+* Writes inline styles for an instance and records which keys it wrote,
+* so they can be removed when a breakpoint turns a prop or the instance off.
+* @param {Object} instance
+* @param {?Element} elem
+* @param {Object} props
+*/
+var writeStyles = function(instance, elem, props) {
+	if (elem == null) return;
+	const written = internals.get(instance).written;
+	if (written.target !== elem) {
+		written.target = elem;
+		written.keys.clear();
+	}
+	for (const key in props) written.keys.add(key);
+	setProps(elem, props, getStyleCache(instance));
+};
+/**
+* Removes inline styles an instance wrote.
+* Other instances that wrote the same keys to the same element lose their style cache,
+* so their next render writes the values again.
+* @param {Object} instance
+* @param {Array} keys
+*/
+var removeStyles = function(instance, keys) {
+	const written = internals.get(instance).written;
+	const target = written.target;
+	if (target == null || keys.length === 0) return;
+	for (const key of keys) {
+		target.style.removeProperty(key);
+		written.keys.delete(key);
+	}
+	const cache = styleCache.get(instance);
+	if (cache != null) for (const key of keys) delete cache[key];
+	for (const other of instances) {
+		if (other === instance) continue;
+		const otherWritten = internals.get(other).written;
+		if (otherWritten.target !== target || keys.some((key) => otherWritten.keys.has(key)) === false) continue;
+		styleCache.delete(other);
+		if (other.isActive()) {
+			if (other.usesTimeline()) other.syncTimeline();
+			else requestUpdate(true);
+		}
+	}
+};
+/**
 * Gets and sets new props of a list of instances.
 * Make sure it's performant as hell.
 * @param {Array} list - Instances to render.
@@ -674,9 +1158,8 @@ var renderInstances = function(list, scrollTop, force = false) {
 	for (let i = 0; i < list.length; i++) {
 		const result = results[i];
 		if (result === void 0) continue;
-		const cache = getStyleCache(list[i]);
-		setProps(result.elem, result.props, cache);
-		cache[LAST_TIME] = result.normalizedTime;
+		writeStyles(list[i], result.elem, result.props);
+		getStyleCache(list[i])[LAST_TIME] = result.normalizedTime;
 	}
 };
 /**
@@ -735,32 +1218,91 @@ var requestTimelineRefresh = function() {
 		if (max === lastTimelineMax) return;
 		lastTimelineMax = max;
 		const scrollTop = getScrollTop();
-		for (const instance of instances) if (instance != null && instance.usesTimeline()) instance.syncTimeline(scrollTop, max);
+		for (const instance of instances) if (instance.usesTimeline()) instance.syncTimeline(scrollTop, max);
 	});
 };
 /**
-* Recalculates instances in two passes: all measurements first, then all style
-* writes, so the layout is only computed once instead of once per instance.
-* @param {Array} list
+* Default error handler of calculateInstances(): warns and turns the instance off,
+* so one bad config (e.g. an override that's only invalid at one breakpoint)
+* doesn't stop the others from being applied.
+* @param {Object} instance
+* @param {Error} error
+* @returns {Boolean} Whether to skip applying the instance.
 */
-var calculateInstances = function(list) {
+var disableOnError = function(instance, error) {
+	console.warn("[buttery]", error.message, instance.getData() != null ? instance.getData().elem : "");
+	internals.get(instance).disable();
+	return false;
+};
+/**
+* Recalculates instances in three passes, so the layout is only computed once:
+* 1. Writes: elements measured by these instances lose the inline styles and native
+*    animations applied to them, so their own transforms don't shift the measurements.
+* 2. Reads: all measurements.
+* 3. Writes: all styles and native animations.
+* @param {Array} list
+* @param {Function} onError - (instance, error) => skip. Defaults to warning and turning the instance off.
+*/
+var calculateInstances = function(list, onError = disableOnError) {
 	viewportHeight = null;
 	maxScrollTop = null;
-	for (const instance of list) internals.get(instance).measure();
-	invalidateLists();
-	let scrollTop;
-	let max;
-	if (list.some((instance) => instance.usesTimeline())) {
-		scrollTop = getScrollTop();
-		max = getMaxScrollTop();
+	const measured = new Set(list.map((instance) => internals.get(instance).raw.elem).filter((elem) => elem != null));
+	const all = new Set(list);
+	if (measured.size > 0) {
+		for (const instance of instances) if (internals.get(instance).resetIfTargets(measured)) all.add(instance);
 	}
-	for (const instance of list) internals.get(instance).apply(scrollTop, max);
+	const applied = [];
+	for (const instance of all) try {
+		internals.get(instance).measure();
+		applied.push(instance);
+	} catch (error) {
+		if (onError(instance, error) === false) applied.push(instance);
+	}
+	invalidateLists();
+	const scrollTop = getScrollTop();
+	const max = getMaxScrollTop();
+	for (const instance of applied) internals.get(instance).apply(scrollTop, max);
 };
 /**
 * Recalculates all tracked instances (e.g. after a layout change).
 */
 var recalculateAll = function() {
 	calculateInstances(getTrackedInstances(instances));
+};
+/**
+* Recalculates all tracked instances in the next frame. Batches several calls,
+* e.g. scan() running for several swapped elements.
+*/
+var requestRecalculate = function() {
+	if (recalculateFrameId != null) return;
+	recalculateFrameId = requestAnimationFrame(() => {
+		recalculateFrameId = null;
+		recalculateAll();
+		requestUpdate(true);
+	});
+};
+/**
+* Returns the instances that use breakpoints, now or at their last measurement.
+* @returns {Array}
+*/
+var getBreakpointInstances = function() {
+	return Array.from(instances).filter((instance) => {
+		const internal = internals.get(instance);
+		return internal.usedBreakpoints || hasBreakpointKeys(internal.raw);
+	});
+};
+/**
+* Re-applies breakpoint overrides in the next frame, after the viewport crossed a breakpoint.
+*/
+var requestBreakpointRefresh = function() {
+	if (breakpointFrameId != null) return;
+	breakpointFrameId = requestAnimationFrame(() => {
+		breakpointFrameId = null;
+		const list = getBreakpointInstances();
+		if (list.length === 0) return;
+		calculateInstances(list);
+		requestUpdate(true);
+	});
 };
 /**
 * Handles resize events.
@@ -778,11 +1320,20 @@ var handleResize = debounce(() => {
 	requestUpdate(true);
 }, 150);
 /**
+* Error handler of calculateInstances() that throws, e.g. for create() and calculate().
+* @param {Object} instance
+* @param {Error} error
+*/
+var rethrow = function(instance, error) {
+	throw error;
+};
+/**
 * Creates a new instance.
 * @param {Object} data
+* @param {Boolean} defer - Don't calculate yet (scan() calculates many instances at once).
 * @returns {Object} instance
 */
-var create = function(data) {
+var createInstance = function(data, defer) {
 	let _data = null;
 	let active = false;
 	let timelineMode = false;
@@ -818,13 +1369,13 @@ var create = function(data) {
 		if (elem == null) return;
 		if (scrollTop == null) scrollTop = getScrollTop();
 		if (max == null) max = getMaxScrollTop();
-		const cache = getStyleCache(instance);
 		const { props } = computeProps(_data, scrollTop);
-		setProps(elem, pickProps(props, Object.keys(props).filter((key) => animatedKeys.includes(key) === false)), cache);
+		const staticKeys = Object.keys(props).filter((key) => animatedKeys.includes(key) === false);
+		writeStyles(instance, elem, pickProps(props, staticKeys));
 		if (active === false && animation == null) return;
 		if (animatedKeys.length === 0 || max <= 0) {
 			_cancelAnimation();
-			setProps(elem, pickProps(props, animatedKeys), cache);
+			writeStyles(instance, elem, pickProps(props, animatedKeys));
 			return;
 		}
 		const keyframes = buildKeyframes(_data, animatedKeys, max);
@@ -846,20 +1397,67 @@ var create = function(data) {
 			_fallback();
 		}
 	};
+	const _disable = function() {
+		_data = {
+			disabled: true,
+			elem: data.elem,
+			direct: data.direct == null ? false : data.direct,
+			track: data.track == null ? true : data.track,
+			timeline: data.timeline == null ? "auto" : data.timeline,
+			hasCallbacks: false,
+			props: {},
+			propKeys: []
+		};
+		animatedKeys = [];
+		timelineMode = false;
+	};
 	const _measure = function() {
-		_data = validate(data);
+		internal.usedBreakpoints = hasBreakpointKeys(data);
+		const resolved = internal.usedBreakpoints ? resolveBreakpoints(data) : data;
 		styleCache.delete(instance);
+		if (resolved === false) {
+			_disable();
+			return;
+		}
+		_data = validate(resolved);
+		_data.disabled = false;
 		animatedKeys = getAnimatedKeys(_data);
 		timelineMode = canUseTimeline(_data, animatedKeys);
 	};
+	const _resetIfTargets = function(elems) {
+		const target = internal.written.target || animationTarget;
+		if (target == null || elems.has(target) === false) return false;
+		_cancelAnimation();
+		for (const key of internal.written.keys) target.style.removeProperty(key);
+		internal.written.keys.clear();
+		styleCache.delete(instance);
+		wasReset = true;
+		return true;
+	};
 	const _apply = function(scrollTop, max) {
+		const target = getElem(_data);
+		const written = internal.written;
+		if (written.target != null) {
+			const stale = written.target !== target || _data.disabled ? Array.from(written.keys) : Array.from(written.keys).filter((key) => _data.propKeys.includes(key) === false);
+			removeStyles(instance, stale);
+		}
 		if (timelineMode) _syncTimeline(scrollTop, max);
-		else _cancelAnimation();
+		else {
+			_cancelAnimation();
+			if ((active || wasReset) && _data.disabled === false) {
+				const position = isLenisDriven(instance) ? getLenisScrollTop() : scrollTop;
+				const { normalizedTime, props } = computeProps(_data, position);
+				writeStyles(instance, target, props);
+				getStyleCache(instance)[LAST_TIME] = normalizedTime;
+			}
+		}
+		wasReset = false;
 	};
 	const _calculate = function() {
-		calculateInstances([instance]);
+		calculateInstances([instance], rethrow);
 	};
 	const _update = () => {
+		if (_data.disabled) return {};
 		if (timelineMode) {
 			_syncTimeline();
 			const { props } = getProps(instance);
@@ -867,9 +1465,8 @@ var create = function(data) {
 		}
 		const scrollTop = isLenisDriven(instance) ? getLenisScrollTop() : getScrollTop();
 		const { elem, normalizedTime, props } = getProps(instance, scrollTop);
-		const cache = getStyleCache(instance);
-		setProps(elem, props, cache);
-		cache[LAST_TIME] = normalizedTime;
+		writeStyles(instance, elem, props);
+		getStyleCache(instance)[LAST_TIME] = normalizedTime;
 		return props;
 	};
 	const _start = () => {
@@ -885,9 +1482,17 @@ var create = function(data) {
 	};
 	const _destroy = () => {
 		_cancelAnimation();
-		instances[index] = void 0;
+		instances.delete(instance);
 		styleCache.delete(instance);
 		invalidateLists();
+		if (declarativeInstances.delete(instance) && internal.source != null) {
+			const list = scannedElements.get(internal.source);
+			if (list != null) {
+				const remaining = list.filter((other) => other !== instance);
+				if (remaining.length > 0) scannedElements.set(internal.source, remaining);
+				else scannedElements.delete(internal.source);
+			}
+		}
 	};
 	const instance = {
 		isActive: _isActive,
@@ -901,14 +1506,41 @@ var create = function(data) {
 		stop: _stop,
 		destroy: _destroy
 	};
-	internals.set(instance, {
+	const internal = {
+		raw: data,
 		measure: _measure,
-		apply: _apply
-	});
-	const index = instances.push(instance) - 1;
+		apply: _apply,
+		disable: _disable,
+		resetIfTargets: _resetIfTargets,
+		activate: () => {
+			active = true;
+		},
+		written: {
+			target: null,
+			keys: /* @__PURE__ */ new Set()
+		},
+		usedBreakpoints: false,
+		source: null
+	};
+	let wasReset = false;
+	internals.set(instance, internal);
+	instances.add(instance);
 	invalidateLists();
-	instance.calculate();
+	if (defer === false) try {
+		instance.calculate();
+	} catch (error) {
+		instance.destroy();
+		throw error;
+	}
 	return instance;
+};
+/**
+* Creates a new instance.
+* @param {Object} data
+* @returns {Object} instance
+*/
+var create = function(data) {
+	return createInstance(data, false);
 };
 /**
 * Starts listening for scroll changes.
@@ -918,11 +1550,19 @@ var create = function(data) {
 * @param {?Object} options.lenis - A Lenis instance that drives instances with `timeline: 'lenis'`.
 * @param {?Boolean} options.nativeOnTouch - Use native timelines for 'lenis' instances on touch devices
 *   when Lenis doesn't smooth touch scrolling (default true).
+* @param {?Object} options.breakpoints - Breakpoint names and min-widths (default: Tailwind's).
+*   Numbers are pixels, strings are CSS lengths, e.g. `{ md: '48rem', desktop: 1200 }`.
 */
 var mount = function(options = {}) {
 	if (init) return;
+	if (options.breakpoints != null) {
+		if (isPlainObject(options.breakpoints) === false) throw new Error("Option `breakpoints` must be an object");
+		for (const name in options.breakpoints) if (RESERVED_KEYS.includes(name) || name.startsWith("max-")) throw new Error(`Breakpoint name \`${name}\` is reserved`);
+	}
 	init = true;
 	settings = Object.assign({}, settings, { lenis: null }, options);
+	breakpointList = null;
+	mediaQueries.clear();
 	viewportWidth = getViewportWidth();
 	viewportHeight = null;
 	maxScrollTop = null;
@@ -941,10 +1581,26 @@ var mount = function(options = {}) {
 	listeners = {
 		onScroll,
 		onPageShow,
-		offLenis: null
+		offLenis: null,
+		offBreakpoints: []
 	};
+	const onBreakpointChange = () => requestBreakpointRefresh();
+	for (const breakpoint of getBreakpoints()) {
+		const mql = getMediaQuery(breakpoint);
+		if (mql == null) continue;
+		if (typeof mql.addEventListener === "function") {
+			mql.addEventListener("change", onBreakpointChange);
+			listeners.offBreakpoints.push(() => mql.removeEventListener("change", onBreakpointChange));
+		} else {
+			mql.addListener(onBreakpointChange);
+			listeners.offBreakpoints.push(() => mql.removeListener(onBreakpointChange));
+		}
+	}
 	invalidateLists();
-	calculateInstances(instances.filter((instance) => instance != null && instance.getData().timeline === "lenis"));
+	calculateInstances(Array.from(instances).filter((instance) => {
+		const data = instance.getData();
+		return data != null && data.timeline === "lenis" || internals.get(instance).usedBreakpoints || hasBreakpointKeys(internals.get(instance).raw);
+	}));
 	const lenis = settings.lenis;
 	if (lenis != null) {
 		if (typeof lenis.on !== "function") throw new Error("Option `lenis` must be a Lenis instance");
@@ -971,19 +1627,20 @@ var mount = function(options = {}) {
 var unmount = function() {
 	if (init === false) return;
 	let instancesInDom = false;
-	for (const instance of instances) {
-		if (instance == null) continue;
-		const elem = instance.getData().elem;
+	for (const instance of Array.from(instances)) {
+		const data = instance.getData();
+		const elem = internals.get(instance).source || (data != null ? data.elem : null);
 		if (elem == null || document.body.contains(elem) === false) instance.destroy();
 		else instancesInDom = true;
 	}
-	if (instancesInDom === false) instances = [];
+	if (instancesInDom === false) instances.clear();
 	if (listeners != null) {
 		window.removeEventListener("scroll", listeners.onScroll);
 		window.removeEventListener("resize", handleResize);
 		window.removeEventListener("orientationchange", handleResize);
 		window.removeEventListener("pageshow", listeners.onPageShow);
 		if (listeners.offLenis != null) listeners.offLenis();
+		for (const off of listeners.offBreakpoints) off();
 		listeners = null;
 	}
 	handleResize.cancel();
@@ -999,6 +1656,14 @@ var unmount = function() {
 		cancelAnimationFrame(timelineFrameId);
 		timelineFrameId = null;
 	}
+	if (breakpointFrameId != null) {
+		cancelAnimationFrame(breakpointFrameId);
+		breakpointFrameId = null;
+	}
+	if (recalculateFrameId != null) {
+		cancelAnimationFrame(recalculateFrameId);
+		recalculateFrameId = null;
+	}
 	pendingForce = false;
 	previousScrollTop = null;
 	previousLenisScroll = null;
@@ -1007,6 +1672,85 @@ var unmount = function() {
 	init = false;
 	invalidateLists();
 };
-export { create, mount, supportsTimeline, unmount };
+/**
+* Destroys declarative instances whose element is no longer in the document.
+*/
+var pruneDeclarative = function() {
+	for (const instance of Array.from(declarativeInstances)) if (internals.get(instance).source.isConnected === false) instance.destroy();
+};
+/**
+* Creates and starts instances for elements with `data-buttery` attributes.
+* Elements that were scanned before are skipped, and instances of elements that
+* have left the document are destroyed. Call it again after new content is added.
+* @param {?Element|Document} root - Scans this element (itself included) and its descendants.
+* @param {?Object} options
+* @param {?Object} options.defaults - Data merged under every element's config, e.g. `{ timeline: 'lenis' }`.
+* @param {?Boolean} options.reducedMotion - Animate even when the user prefers reduced motion.
+* @returns {Array} The new instances.
+*/
+var scan = function(root = document, options = {}) {
+	if (typeof document === "undefined" || root == null) return [];
+	pruneDeclarative();
+	if (options.reducedMotion !== true && typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return [];
+	const selector = `[${PREFIX}]`;
+	const elements = [];
+	if (root.nodeType === 1 && root.matches(selector)) elements.push(root);
+	elements.push(...root.querySelectorAll(selector));
+	const breakpointNames = getBreakpoints().map((breakpoint) => breakpoint.name);
+	const created = [];
+	for (const el of elements) {
+		if (scannedElements.has(el) || failedElements.has(el)) continue;
+		const elInstances = [];
+		try {
+			for (const config of parseElement(el, breakpointNames)) {
+				const instance = createInstance(Object.assign({}, options.defaults, config), true);
+				internals.get(instance).source = el;
+				declarativeInstances.add(instance);
+				elInstances.push(instance);
+			}
+		} catch (error) {
+			console.warn("[buttery]", error.message, el);
+			elInstances.forEach((instance) => instance.destroy());
+			failedElements.add(el);
+			continue;
+		}
+		scannedElements.set(el, elInstances);
+		created.push(...elInstances);
+	}
+	if (instances.size > 0) requestRecalculate();
+	if (created.length === 0) return created;
+	for (const instance of created) internals.get(instance).activate();
+	const failed = /* @__PURE__ */ new Set();
+	calculateInstances(created, (instance, error) => {
+		console.warn("[buttery]", error.message, internals.get(instance).source);
+		failed.add(internals.get(instance).source);
+		return true;
+	});
+	for (const instance of created.slice()) {
+		const source = internals.get(instance).source;
+		if (failed.has(source)) {
+			instance.destroy();
+			failedElements.add(source);
+			created.splice(created.indexOf(instance), 1);
+		}
+	}
+	requestUpdate(true);
+	return created;
+};
+/**
+* Destroys the instances scan() created for an element and its descendants,
+* e.g. before the element is removed.
+* @param {?Element|Document} root
+*/
+var release = function(root = document) {
+	if (root == null) return;
+	if (failedElements.has(root)) failedElements.delete(root);
+	if (typeof root.querySelectorAll === "function") for (const el of root.querySelectorAll(`[${PREFIX}]`)) failedElements.delete(el);
+	for (const instance of Array.from(declarativeInstances)) {
+		const source = internals.get(instance).source;
+		if (root === source || root.contains(source)) instance.destroy();
+	}
+};
+export { create, mount, release, scan, supportsTimeline, unmount };
 
 //# sourceMappingURL=buttery.js.map

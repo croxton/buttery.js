@@ -59,26 +59,15 @@
 
     buttery.mount({ timeline: !forceJs, lenis })
 
-    const sky = $('#sky')
     const rocket = $('#rocket')
     const balloon = $('#balloon')
     const layers = $('#layers')
-    const meadow = $('#meadow')
 
     // `elem` is the section, which never moves, so its measurements stay accurate.
     // `direct` is the element that receives the animated values.
     const configs = [
       // Values with two numbers (`translate: x y`) animate the individual transform
       // properties directly, which browsers can run on the compositor thread.
-
-      // 1. Clouds: three depths, nearer = faster
-      ...[['far', '-80px'], ['mid', '-200px'], ['near', '-420px']].map(([depth, to]) => ({
-        elem: sky,
-        direct: sky.querySelector(`[data-depth="${depth}"]`),
-        from: 'top-top',
-        to: 'bottom-top',
-        props: { translate: { from: '0 0px', to: `0 ${to}` } }
-      })),
 
       // 2. Rocket cow
       {
@@ -87,7 +76,11 @@
         from: 'top-bottom',
         to: 'bottom-top',
         props: {
-          translate: { from: '-45vw 40vh', to: '45vw -60vh', timing: 'quadIn' },
+          // Shorter trip on small screens, the full one from the md breakpoint up
+          translate: {
+            from: '-25vw 30vh', to: '25vw -50vh', timing: 'quadIn',
+            md: { from: '-45vw 40vh', to: '45vw -60vh' }
+          },
           rotate: { from: '-10deg', to: '15deg' }
         }
       },
@@ -128,31 +121,15 @@
         from: 'top-bottom',
         to: '50%-40%',
         props: { opacity: { from: 0, to: 1 } }
-      },
-
-      // 5. Landscape settles as the page ends. The back field moves with the page.
-      // Layers behind it start raised and sink (slower than the page);
-      // layers in front start lowered and rise (faster than the page).
-      ...[
-        ['.mountains--far', '-28vh'],
-        ['.mountains--near', '-14vh'],
-        ['.fields--back', '0vh'],
-        ['.fields--front', '8vh'],
-        ['.grass--back', '14vh'],
-        ['.grass--mid', '20vh'],
-        ['.meadow__cow', '34vh'],
-        ['.grass--front', '28vh']
-      ].map(([selector, from]) => ({
-        elem: meadow,
-        direct: $(selector),
-        from: 'top-bottom',
-        to: 'bottom-bottom',
-        props: { translate: { from: `0 ${from}`, to: '0 0vh' } }
-      }))
+      }
     ]
 
-    const instances = configs.map((config) => buttery.create(lenis ? { ...config, timeline: 'lenis' } : config))
+    const defaults = lenis ? { timeline: 'lenis' } : {}
+    const instances = configs.map((config) => buttery.create({ ...config, ...defaults }))
     instances.forEach((instance) => instance.start())
+
+    // The clouds and the meadow are set up with data-buttery attributes in the HTML
+    instances.push(...buttery.scan(document, { defaults }))
 
     // What actually runs (e.g. Lenis instances use native timelines on touch devices)
     const native = instances.every((instance) => instance.usesTimeline())
