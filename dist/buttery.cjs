@@ -20,10 +20,10 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 	value: mod,
 	enumerable: true
 }) : target, mod));
-let parse_unit = require("parse-unit");
-parse_unit = __toESM(parse_unit, 1);
 let eases = require("eases");
 eases = __toESM(eases, 1);
+let parse_unit = require("parse-unit");
+parse_unit = __toESM(parse_unit, 1);
 // lib/attributes.js
 /**
 * Parses declarative `data-buttery*` attributes into configs for `create()`.
@@ -283,27 +283,9 @@ var parseElement = function(el, breakpointNames) {
 	if (Object.keys(shared.props).length > 0) configs.unshift(Object.assign({}, common, instanceOverrides, shared));
 	return configs;
 };
-// lib/buttery.js
+// lib/breakpoints.js
 /**
-* Buttery - scroll animation library
-* Performance focused, lightweight scroll animation library
-*
-* A fork of basicScroll.js by Tobias Reich (@electerious)
-* Created and maintained by Mark Croxton (@croxton)
-*
-* - Uses native scroll-driven animations (ScrollTimeline + Web Animations) when supported,
-*   so values update in sync with scrolling without per-frame JavaScript.
-* - Falls back to an event-driven requestAnimationFrame loop otherwise.
-* - Instances with `inside`/`outside` callbacks use the fallback by default (callbacks need JS per frame).
-* - Optional 'lenis' mode: instances update synchronously from a Lenis instance's `scroll` event,
-*   using its sub-pixel scroll position, instead of the window scroll listener.
-*   On touch devices where Lenis doesn't smooth touch (no `syncTouch`), they use native timelines instead.
-* - Clamps scrollTop to avoid rubber-band (overscroll) bounce affecting animations
-* - Uses a stable viewport height that doesn't change when the iOS toolbar collapses/expands
-* - Ignores height-only resize events (iOS address bar show/hide) for recalculation
-* - Skips redundant style writes
-* - Breakpoint overrides (`md: {...}`, `'max-md': false`), re-applied when the viewport crosses a breakpoint
-* - Declarative `data-buttery*` attributes, created with scan() and destroyed with release()
+* Breakpoints: configuration, media queries and resolving `md` / `max-md` overrides.
 */
 var DEFAULT_BREAKPOINTS = {
 	sm: "40rem",
@@ -312,113 +294,17 @@ var DEFAULT_BREAKPOINTS = {
 	xl: "80rem",
 	"2xl": "96rem"
 };
-var RESERVED_KEYS = [
-	"from",
-	"to",
-	"via",
-	"timing",
-	"elem",
-	"props",
-	"direct",
-	"track",
-	"timeline",
-	"inside",
-	"outside"
-];
-var instances = /* @__PURE__ */ new Set();
-var frameId = null;
-var pendingForce = false;
-var init = false;
-var previousScrollTop = null;
-var previousLenisScroll = null;
-var maxScrollTop = null;
-var viewportHeight = null;
-var viewportWidth = null;
-var listeners = null;
-var resizeObserver = null;
-var timelineFrameId = null;
-var lastTimelineMax = null;
-var scrollTimeline = null;
-var timelineSupport = null;
-var settings = {
-	recalculateOnResize: false,
-	timeline: true,
-	lenis: null,
-	nativeOnTouch: true,
-	breakpoints: DEFAULT_BREAKPOINTS
-};
+var configured = DEFAULT_BREAKPOINTS;
 var breakpointList = null;
 var mediaQueries = /* @__PURE__ */ new Map();
-var breakpointFrameId = null;
-var recalculateFrameId = null;
-var declarativeInstances = /* @__PURE__ */ new Set();
-var scannedElements = /* @__PURE__ */ new WeakMap();
-var failedElements = /* @__PURE__ */ new WeakSet();
-var TIMELINE_SAMPLES = 30;
-var styleCache = /* @__PURE__ */ new WeakMap();
-var LAST_TIME = Symbol("lastTime");
-var internals = /* @__PURE__ */ new WeakMap();
-var lists = null;
-var registeredProperties = /* @__PURE__ */ new Map();
 /**
-* Debounces a function that will be triggered many times.
-* @param {Function} fn
-* @param {Number} duration
-* @returns {Function}
+* Sets the breakpoints and clears the cached lists and media queries.
+* @param {?Object} breakpoints - Names and min-widths.
 */
-var debounce = function(fn, duration) {
-	let timeout = null;
-	const debounced = (...args) => {
-		clearTimeout(timeout);
-		timeout = setTimeout(() => fn(...args), duration);
-	};
-	debounced.cancel = () => clearTimeout(timeout);
-	return debounced;
-};
-/**
-* Checks if an instance is driven by an attached Lenis instance.
-* @param {Object} instance
-* @returns {Boolean}
-*/
-var isLenisDriven = function(instance) {
-	return init === true && settings.lenis != null && instance.getData().timeline === "lenis" && instance.usesTimeline() === false;
-};
-/**
-* Marks the cached instance lists as stale.
-* Call whenever an instance is added, removed, started, stopped or changes mode.
-*/
-var invalidateLists = function() {
-	lists = null;
-};
-/**
-* Returns the active instances driven by the JS loop (window scroll listener)
-* and by Lenis. Cached, so filtering doesn't happen on every frame.
-* @returns {Object} { loop, lenis }
-*/
-var getLists = function() {
-	if (lists != null) return lists;
-	const loop = [];
-	const lenis = [];
-	for (const instance of instances) {
-		if (instance.isActive() === false || instance.usesTimeline()) continue;
-		const data = instance.getData();
-		if (data == null || data.disabled === true) continue;
-		if (isLenisDriven(instance)) lenis.push(instance);
-		else loop.push(instance);
-	}
-	lists = {
-		loop,
-		lenis
-	};
-	return lists;
-};
-/**
-* Returns all tracked instances from a list.
-* @param {Iterable} list
-* @returns {Array} instances - Tracked instances.
-*/
-var getTrackedInstances = function(list) {
-	return Array.from(list).filter((instance) => instance.getData() != null && instance.getData().track);
+var setBreakpoints = function(breakpoints) {
+	configured = breakpoints || {};
+	breakpointList = null;
+	mediaQueries.clear();
 };
 /**
 * Converts a breakpoint value to pixels, for sorting. Numbers are pixels, `rem`/`em` are × 16.
@@ -434,8 +320,8 @@ var breakpointToPx = function(value) {
 * @returns {Array} [{ name, px, query }]
 */
 var getBreakpoints = function() {
-	if (breakpointList == null) breakpointList = Object.keys(settings.breakpoints || {}).map((name) => {
-		const value = settings.breakpoints[name];
+	if (breakpointList == null) breakpointList = Object.keys(configured).map((name) => {
+		const value = configured[name];
 		const width = typeof value === "number" ? `${value}px` : String(value).trim();
 		return {
 			name,
@@ -568,6 +454,350 @@ var resolveBreakpoints = function(raw) {
 	}
 	return data;
 };
+// lib/values.js
+/**
+* Pure value helpers: parsing ranges and prop values, validating data and interpolating props.
+*/
+/**
+* Checks if a value is absolute.
+* An absolute value must have a value that's not NaN.
+* @param {String|Integer} value
+* @returns {Boolean} isAbsolute
+*/
+var isAbsoluteValue = function(value) {
+	return isNaN((0, parse_unit.default)(value)[0]) === false;
+};
+/**
+* Parses an absolute value.
+* @param {String|Integer} value
+* @returns {Object} value - Parsed value.
+*/
+var parseAbsoluteValue = function(value) {
+	const parsedValue = (0, parse_unit.default)(value);
+	return {
+		value: parsedValue[0],
+		unit: parsedValue[1]
+	};
+};
+var NUMBER_PATTERN = /(^|[^\w#.])(-?(?:\d+\.?\d*|\.\d+))([a-zA-Z%]*)/g;
+/**
+* Parses a prop value that can contain several numbers, e.g. `'-100px'`,
+* `'0 -100px'` or `'translateY(10px) rotate(5deg)'`.
+* The text around the numbers is kept, so the value can be rebuilt after interpolation.
+* @param {String|Number} value
+* @returns {?Object} { numbers: [{ value, unit }], parts: [String] } (parts.length = numbers.length + 1),
+*   or null if the value contains no number.
+*/
+var parsePropValue = function(value) {
+	const string = String(value).trim();
+	const numbers = [];
+	const parts = [];
+	let last = 0;
+	for (const match of string.matchAll(NUMBER_PATTERN)) {
+		const start = match.index + match[1].length;
+		parts.push(string.slice(last, start));
+		numbers.push({
+			value: parseFloat(match[2]),
+			unit: match[3]
+		});
+		last = match.index + match[0].length;
+	}
+	if (numbers.length === 0) return null;
+	parts.push(string.slice(last));
+	return {
+		numbers,
+		parts: parts.map((part) => part.replace(/\s+/g, " "))
+	};
+};
+/**
+* Checks that two parsed prop values have the same structure.
+* @param {Object} a
+* @param {Object} b
+* @returns {Boolean}
+*/
+var hasSameStructure = function(a, b) {
+	return a.numbers.length === b.numbers.length && a.parts.every((part, i) => part === b.parts[i]);
+};
+/**
+* Checks if a value is relative.
+* A relative value must start and end with [a-z] and needs a '-' in the middle.
+* @param {String|Integer} value
+* @returns {Boolean} isRelative
+*/
+var isRelativeValue = function(value) {
+	return String(value).match(/^[a-z0-9%]+-[a-z0-9%]+$/) !== null;
+};
+/**
+* Converts a relative value to an absolute value.
+* @param {String} value
+* @param {Node} elem - Anchor of the relative value.
+* @param {Number} scrollTop - Pixels scrolled in document (raw, unclamped).
+* @param {Number} vh - Height of the viewport.
+* @returns {String} value - Absolute value.
+*/
+var relativeToAbsoluteValue = function(value, elem, scrollTop, vh) {
+	const elemSize = elem.getBoundingClientRect();
+	const elemAnchor = value.match(/^[a-z0-9%]+/)[0];
+	const viewportAnchor = value.match(/[a-z0-9%]+$/)[0];
+	const elemTop = elemSize.top + scrollTop;
+	let y = 0;
+	if (viewportAnchor.match(/%$/) !== null) {
+		const percent = parseFloat(viewportAnchor.replace("%", "")) / 100;
+		y -= vh * percent;
+	} else {
+		if (viewportAnchor === "top") y -= 0;
+		if (viewportAnchor === "middle") y -= vh / 2;
+		if (viewportAnchor === "bottom") y -= vh;
+	}
+	if (elemAnchor.match(/%$/) !== null) {
+		const percent = parseFloat(elemAnchor.replace("%", "")) / 100;
+		y += elemTop + elemSize.height * percent;
+	} else {
+		if (elemAnchor === "top") y += elemTop;
+		if (elemAnchor === "middle") y += elemTop + elemSize.height / 2;
+		if (elemAnchor === "bottom") y += elemTop + elemSize.height;
+	}
+	return `${y}px`;
+};
+/**
+* Validates data and sets defaults for undefined properties.
+* @param {?Object} data
+* @param {Function} toAbsolute - Converts a relative value, (value, elem) => String.
+* @returns {Object} data - Validated data.
+*/
+var validate = function(data = {}, toAbsolute) {
+	data = Object.assign({}, data);
+	data.hasCallbacks = data.inside != null || data.outside != null;
+	if (data.inside == null) data.inside = () => {};
+	if (data.outside == null) data.outside = () => {};
+	if (data.direct == null) data.direct = false;
+	if (data.track == null) data.track = true;
+	if (data.props == null) data.props = {};
+	if (data.timeline == null) data.timeline = "auto";
+	if (data.from == null) throw new Error("Missing property `from`");
+	if (data.to == null) throw new Error("Missing property `to`");
+	if (typeof data.inside !== "function") throw new Error("Property `inside` must be undefined or a function");
+	if (typeof data.outside !== "function") throw new Error("Property `outside` must be undefined or a function");
+	if (typeof data.direct !== "boolean" && !(data.direct instanceof Element)) throw new Error("Property `direct` must be undefined, a boolean or a DOM element/node");
+	if (data.direct === true && data.elem == null) throw new Error("Property `elem` is required when `direct` is true");
+	if (typeof data.track !== "boolean") throw new Error("Property `track` must be undefined or a boolean");
+	if (typeof data.props !== "object") throw new Error("Property `props` must be undefined or an object");
+	if (data.timeline !== "auto" && data.timeline !== "lenis" && typeof data.timeline !== "boolean") throw new Error("Property `timeline` must be undefined, a boolean, 'auto' or 'lenis'");
+	if (data.elem == null) {
+		if (isAbsoluteValue(data.from) === false) throw new Error("Property `from` must be a absolute value when no `elem` has been provided");
+		if (isAbsoluteValue(data.to) === false) throw new Error("Property `to` must be a absolute value when no `elem` has been provided");
+	} else {
+		if (isRelativeValue(data.from) === true) data.from = toAbsolute(data.from, data.elem);
+		if (isRelativeValue(data.to) === true) data.to = toAbsolute(data.to, data.elem);
+	}
+	data.from = parseAbsoluteValue(data.from);
+	data.to = parseAbsoluteValue(data.to);
+	data.props = Object.keys(data.props).reduce((acc, key) => {
+		const prop = Object.assign({}, data.props[key]);
+		const from = parsePropValue(prop.from);
+		const to = parsePropValue(prop.to);
+		const via = prop.via != null ? parsePropValue(prop.via) : null;
+		if (from == null) throw new Error("Property `from` of prop must contain a number");
+		if (to == null) throw new Error("Property `to` of prop must contain a number");
+		if (prop.via != null && via == null) throw new Error("Property `via` of prop must contain a number");
+		if (hasSameStructure(from, to) === false) throw new Error(`Properties \`from\` and \`to\` of prop \`${key}\` must have the same number of values and the same text around them`);
+		if (via != null && hasSameStructure(from, via) === false) throw new Error(`Property \`via\` of prop \`${key}\` must have the same number of values and the same text around them as \`from\``);
+		prop.from = from.numbers.map((number) => number.value);
+		prop.to = to.numbers.map((number) => number.value);
+		prop.via = via != null ? via.numbers.map((number) => number.value) : null;
+		prop.parts = from.parts;
+		prop.units = from.numbers.map((number, i) => number.unit || to.numbers[i].unit || (via != null ? via.numbers[i].unit : ""));
+		if (prop.timing == null) prop.timing = eases.default["linear"];
+		if (typeof prop.timing !== "string" && typeof prop.timing !== "function") throw new Error("Property `timing` of prop must be undefined, a string or a function");
+		if (typeof prop.timing === "string" && eases.default[prop.timing] == null) throw new Error("Unknown timing for property `timing` of prop");
+		if (typeof prop.timing === "string") prop.timing = eases.default[prop.timing];
+		acc[key] = prop;
+		return acc;
+	}, {});
+	data.propKeys = Object.keys(data.props);
+	return data;
+};
+/**
+* Calculates how far through its range an instance is.
+* @param {Object} data - Validated data.
+* @param {Number} scrollTop - Pixels scrolled in document (clamped).
+* @returns {Object} precisePercentage (unclamped) and normalizedTime (clamped 0–1)
+*/
+var getProgress = function(data, scrollTop) {
+	const total = data.to.value - data.from.value;
+	const current = scrollTop - data.from.value;
+	const precisePercentage = total === 0 ? current >= 0 ? 100 : 0 : current / (total / 100);
+	return {
+		precisePercentage,
+		normalizedTime: Math.min(Math.max(precisePercentage, 0), 100) / 100
+	};
+};
+/**
+* Calculates prop values for a given scroll position. Pure: no callbacks, no DOM writes.
+* @param {Object} data - Validated data.
+* @param {Number} scrollTop - Pixels scrolled in document (clamped).
+* @returns {Object} precisePercentage, normalizedTime and props
+*/
+var computeProps = function(data, scrollTop) {
+	const { precisePercentage, normalizedTime } = getProgress(data, scrollTop);
+	const props = {};
+	for (const key of data.propKeys) {
+		const prop = data.props[key];
+		const time = prop.timing(normalizedTime);
+		let start = prop.from;
+		let end = prop.to;
+		let localTime = time;
+		if (prop.via != null) {
+			const midpoint = .5;
+			if (time <= midpoint) {
+				end = prop.via;
+				localTime = time / midpoint;
+			} else {
+				start = prop.via;
+				localTime = (time - midpoint) / midpoint;
+			}
+		}
+		let output = prop.parts[0];
+		for (let i = 0; i < start.length; i++) {
+			const value = start[i] - (start[i] - end[i]) * localTime;
+			output += Math.round(value * 1e4) / 1e4 + prop.units[i] + prop.parts[i + 1];
+		}
+		props[key] = output;
+	}
+	return {
+		precisePercentage,
+		normalizedTime,
+		props
+	};
+};
+// lib/buttery.js
+/**
+* Buttery - scroll animation library
+* Performance focused, lightweight scroll animation library
+*
+* A fork of basicScroll.js by Tobias Reich (@electerious)
+* Created and maintained by Mark Croxton (@croxton)
+*
+* - Uses native scroll-driven animations (ScrollTimeline + Web Animations) when supported,
+*   so values update in sync with scrolling without per-frame JavaScript.
+* - Falls back to an event-driven requestAnimationFrame loop otherwise.
+* - Instances with `inside`/`outside` callbacks use the fallback by default (callbacks need JS per frame).
+* - Optional 'lenis' mode: instances update synchronously from a Lenis instance's `scroll` event,
+*   using its sub-pixel scroll position, instead of the window scroll listener.
+*   On touch devices where Lenis doesn't smooth touch (no `syncTouch`), they use native timelines instead.
+* - Clamps scrollTop to avoid rubber-band (overscroll) bounce affecting animations
+* - Uses a stable viewport height that doesn't change when the iOS toolbar collapses/expands
+* - Ignores height-only resize events (iOS address bar show/hide) for recalculation
+* - Skips redundant style writes
+* - Breakpoint overrides (`md: {...}`, `'max-md': false`), re-applied when the viewport crosses a breakpoint
+* - Declarative `data-buttery*` attributes, created with scan() and destroyed with release()
+*/
+var RESERVED_KEYS = [
+	"from",
+	"to",
+	"via",
+	"timing",
+	"elem",
+	"props",
+	"direct",
+	"track",
+	"timeline",
+	"inside",
+	"outside"
+];
+var instances = /* @__PURE__ */ new Set();
+var frameId = null;
+var pendingForce = false;
+var init = false;
+var previousScrollTop = null;
+var previousLenisScroll = null;
+var maxScrollTop = null;
+var viewportHeight = null;
+var viewportWidth = null;
+var listeners = null;
+var resizeObserver = null;
+var timelineFrameId = null;
+var lastTimelineMax = null;
+var scrollTimeline = null;
+var timelineSupport = null;
+var settings = {
+	recalculateOnResize: false,
+	timeline: true,
+	lenis: null,
+	nativeOnTouch: true,
+	breakpoints: DEFAULT_BREAKPOINTS
+};
+var breakpointFrameId = null;
+var recalculateFrameId = null;
+var declarativeInstances = /* @__PURE__ */ new Set();
+var scannedElements = /* @__PURE__ */ new WeakMap();
+var failedElements = /* @__PURE__ */ new WeakSet();
+var TIMELINE_SAMPLES = 30;
+var styleCache = /* @__PURE__ */ new WeakMap();
+var LAST_TIME = Symbol("lastTime");
+var internals = /* @__PURE__ */ new WeakMap();
+var lists = null;
+var registeredProperties = /* @__PURE__ */ new Map();
+/**
+* Debounces a function that will be triggered many times.
+* @param {Function} fn
+* @param {Number} duration
+* @returns {Function}
+*/
+var debounce = function(fn, duration) {
+	let timeout = null;
+	const debounced = (...args) => {
+		clearTimeout(timeout);
+		timeout = setTimeout(() => fn(...args), duration);
+	};
+	debounced.cancel = () => clearTimeout(timeout);
+	return debounced;
+};
+/**
+* Checks if an instance is driven by an attached Lenis instance.
+* @param {Object} instance
+* @returns {Boolean}
+*/
+var isLenisDriven = function(instance) {
+	return init === true && settings.lenis != null && instance.getData().timeline === "lenis" && instance.usesTimeline() === false;
+};
+/**
+* Marks the cached instance lists as stale.
+* Call whenever an instance is added, removed, started, stopped or changes mode.
+*/
+var invalidateLists = function() {
+	lists = null;
+};
+/**
+* Returns the active instances driven by the JS loop (window scroll listener)
+* and by Lenis. Cached, so filtering doesn't happen on every frame.
+* @returns {Object} { loop, lenis }
+*/
+var getLists = function() {
+	if (lists != null) return lists;
+	const loop = [];
+	const lenis = [];
+	for (const instance of instances) {
+		if (instance.isActive() === false || instance.usesTimeline()) continue;
+		const data = instance.getData();
+		if (data == null || data.disabled === true) continue;
+		if (isLenisDriven(instance)) lenis.push(instance);
+		else loop.push(instance);
+	}
+	lists = {
+		loop,
+		lenis
+	};
+	return lists;
+};
+/**
+* Returns all tracked instances from a list.
+* @param {Iterable} list
+* @returns {Array} instances - Tracked instances.
+*/
+var getTrackedInstances = function(list) {
+	return Array.from(list).filter((instance) => instance.getData() != null && instance.getData().track);
+};
 /**
 * Checks if native scroll-driven animations can be used.
 * @returns {Boolean}
@@ -649,75 +879,6 @@ var getViewportWidth = function() {
 	return document.documentElement.clientWidth || window.innerWidth;
 };
 /**
-* Checks if a value is absolute.
-* An absolute value must have a value that's not NaN.
-* @param {String|Integer} value
-* @returns {Boolean} isAbsolute
-*/
-var isAbsoluteValue = function(value) {
-	return isNaN((0, parse_unit.default)(value)[0]) === false;
-};
-/**
-* Parses an absolute value.
-* @param {String|Integer} value
-* @returns {Object} value - Parsed value.
-*/
-var parseAbsoluteValue = function(value) {
-	const parsedValue = (0, parse_unit.default)(value);
-	return {
-		value: parsedValue[0],
-		unit: parsedValue[1]
-	};
-};
-var NUMBER_PATTERN = /(^|[^\w#.])(-?(?:\d+\.?\d*|\.\d+))([a-zA-Z%]*)/g;
-/**
-* Parses a prop value that can contain several numbers, e.g. `'-100px'`,
-* `'0 -100px'` or `'translateY(10px) rotate(5deg)'`.
-* The text around the numbers is kept, so the value can be rebuilt after interpolation.
-* @param {String|Number} value
-* @returns {?Object} { numbers: [{ value, unit }], parts: [String] } (parts.length = numbers.length + 1),
-*   or null if the value contains no number.
-*/
-var parsePropValue = function(value) {
-	const string = String(value).trim();
-	const numbers = [];
-	const parts = [];
-	let last = 0;
-	for (const match of string.matchAll(NUMBER_PATTERN)) {
-		const start = match.index + match[1].length;
-		parts.push(string.slice(last, start));
-		numbers.push({
-			value: parseFloat(match[2]),
-			unit: match[3]
-		});
-		last = match.index + match[0].length;
-	}
-	if (numbers.length === 0) return null;
-	parts.push(string.slice(last));
-	return {
-		numbers,
-		parts: parts.map((part) => part.replace(/\s+/g, " "))
-	};
-};
-/**
-* Checks that two parsed prop values have the same structure.
-* @param {Object} a
-* @param {Object} b
-* @returns {Boolean}
-*/
-var hasSameStructure = function(a, b) {
-	return a.numbers.length === b.numbers.length && a.parts.every((part, i) => part === b.parts[i]);
-};
-/**
-* Checks if a value is relative.
-* A relative value must start and end with [a-z] and needs a '-' in the middle.
-* @param {String|Integer} value
-* @returns {Boolean} isRelative
-*/
-var isRelativeValue = function(value) {
-	return String(value).match(/^[a-z0-9%]+-[a-z0-9%]+$/) !== null;
-};
-/**
 * Returns the property that should be used according to direct.
 * @param {Boolean|Node} direct
 * @param {Object} properties
@@ -739,148 +900,6 @@ var getElem = function(data) {
 		elem: data.elem,
 		direct: data.direct
 	});
-};
-/**
-* Converts a relative value to an absolute value.
-* @param {String} value
-* @param {Node} elem - Anchor of the relative value.
-* @param {?Integer} scrollTop - Pixels scrolled in document (raw, unclamped).
-* @param {?Integer} vh - Height of the viewport.
-* @returns {String} value - Absolute value.
-*/
-var relativeToAbsoluteValue = function(value, elem, scrollTop = getRawScrollTop(), vh = getViewportHeight()) {
-	const elemSize = elem.getBoundingClientRect();
-	const elemAnchor = value.match(/^[a-z0-9%]+/)[0];
-	const viewportAnchor = value.match(/[a-z0-9%]+$/)[0];
-	const elemTop = elemSize.top + scrollTop;
-	let y = 0;
-	if (viewportAnchor.match(/%$/) !== null) {
-		const percent = parseFloat(viewportAnchor.replace("%", "")) / 100;
-		y -= vh * percent;
-	} else {
-		if (viewportAnchor === "top") y -= 0;
-		if (viewportAnchor === "middle") y -= vh / 2;
-		if (viewportAnchor === "bottom") y -= vh;
-	}
-	if (elemAnchor.match(/%$/) !== null) {
-		const percent = parseFloat(elemAnchor.replace("%", "")) / 100;
-		y += elemTop + elemSize.height * percent;
-	} else {
-		if (elemAnchor === "top") y += elemTop;
-		if (elemAnchor === "middle") y += elemTop + elemSize.height / 2;
-		if (elemAnchor === "bottom") y += elemTop + elemSize.height;
-	}
-	return `${y}px`;
-};
-/**
-* Validates data and sets defaults for undefined properties.
-* @param {?Object} data
-* @returns {Object} data - Validated data.
-*/
-var validate = function(data = {}) {
-	data = Object.assign({}, data);
-	data.hasCallbacks = data.inside != null || data.outside != null;
-	if (data.inside == null) data.inside = () => {};
-	if (data.outside == null) data.outside = () => {};
-	if (data.direct == null) data.direct = false;
-	if (data.track == null) data.track = true;
-	if (data.props == null) data.props = {};
-	if (data.timeline == null) data.timeline = "auto";
-	if (data.from == null) throw new Error("Missing property `from`");
-	if (data.to == null) throw new Error("Missing property `to`");
-	if (typeof data.inside !== "function") throw new Error("Property `inside` must be undefined or a function");
-	if (typeof data.outside !== "function") throw new Error("Property `outside` must be undefined or a function");
-	if (typeof data.direct !== "boolean" && !(data.direct instanceof Element)) throw new Error("Property `direct` must be undefined, a boolean or a DOM element/node");
-	if (data.direct === true && data.elem == null) throw new Error("Property `elem` is required when `direct` is true");
-	if (typeof data.track !== "boolean") throw new Error("Property `track` must be undefined or a boolean");
-	if (typeof data.props !== "object") throw new Error("Property `props` must be undefined or an object");
-	if (data.timeline !== "auto" && data.timeline !== "lenis" && typeof data.timeline !== "boolean") throw new Error("Property `timeline` must be undefined, a boolean, 'auto' or 'lenis'");
-	if (data.elem == null) {
-		if (isAbsoluteValue(data.from) === false) throw new Error("Property `from` must be a absolute value when no `elem` has been provided");
-		if (isAbsoluteValue(data.to) === false) throw new Error("Property `to` must be a absolute value when no `elem` has been provided");
-	} else {
-		if (isRelativeValue(data.from) === true) data.from = relativeToAbsoluteValue(data.from, data.elem);
-		if (isRelativeValue(data.to) === true) data.to = relativeToAbsoluteValue(data.to, data.elem);
-	}
-	data.from = parseAbsoluteValue(data.from);
-	data.to = parseAbsoluteValue(data.to);
-	data.props = Object.keys(data.props).reduce((acc, key) => {
-		const prop = Object.assign({}, data.props[key]);
-		const from = parsePropValue(prop.from);
-		const to = parsePropValue(prop.to);
-		const via = prop.via != null ? parsePropValue(prop.via) : null;
-		if (from == null) throw new Error("Property `from` of prop must contain a number");
-		if (to == null) throw new Error("Property `to` of prop must contain a number");
-		if (prop.via != null && via == null) throw new Error("Property `via` of prop must contain a number");
-		if (hasSameStructure(from, to) === false) throw new Error(`Properties \`from\` and \`to\` of prop \`${key}\` must have the same number of values and the same text around them`);
-		if (via != null && hasSameStructure(from, via) === false) throw new Error(`Property \`via\` of prop \`${key}\` must have the same number of values and the same text around them as \`from\``);
-		prop.from = from.numbers.map((number) => number.value);
-		prop.to = to.numbers.map((number) => number.value);
-		prop.via = via != null ? via.numbers.map((number) => number.value) : null;
-		prop.parts = from.parts;
-		prop.units = from.numbers.map((number, i) => number.unit || to.numbers[i].unit || (via != null ? via.numbers[i].unit : ""));
-		if (prop.timing == null) prop.timing = eases.default["linear"];
-		if (typeof prop.timing !== "string" && typeof prop.timing !== "function") throw new Error("Property `timing` of prop must be undefined, a string or a function");
-		if (typeof prop.timing === "string" && eases.default[prop.timing] == null) throw new Error("Unknown timing for property `timing` of prop");
-		if (typeof prop.timing === "string") prop.timing = eases.default[prop.timing];
-		acc[key] = prop;
-		return acc;
-	}, {});
-	data.propKeys = Object.keys(data.props);
-	return data;
-};
-/**
-* Calculates how far through its range an instance is.
-* @param {Object} data - Validated data.
-* @param {Number} scrollTop - Pixels scrolled in document (clamped).
-* @returns {Object} precisePercentage (unclamped) and normalizedTime (clamped 0–1)
-*/
-var getProgress = function(data, scrollTop) {
-	const total = data.to.value - data.from.value;
-	const current = scrollTop - data.from.value;
-	const precisePercentage = total === 0 ? current >= 0 ? 100 : 0 : current / (total / 100);
-	return {
-		precisePercentage,
-		normalizedTime: Math.min(Math.max(precisePercentage, 0), 100) / 100
-	};
-};
-/**
-* Calculates prop values for a given scroll position. Pure: no callbacks, no DOM writes.
-* @param {Object} data - Validated data.
-* @param {Number} scrollTop - Pixels scrolled in document (clamped).
-* @returns {Object} precisePercentage, normalizedTime and props
-*/
-var computeProps = function(data, scrollTop) {
-	const { precisePercentage, normalizedTime } = getProgress(data, scrollTop);
-	const props = {};
-	for (const key of data.propKeys) {
-		const prop = data.props[key];
-		const time = prop.timing(normalizedTime);
-		let start = prop.from;
-		let end = prop.to;
-		let localTime = time;
-		if (prop.via != null) {
-			const midpoint = .5;
-			if (time <= midpoint) {
-				end = prop.via;
-				localTime = time / midpoint;
-			} else {
-				start = prop.via;
-				localTime = (time - midpoint) / midpoint;
-			}
-		}
-		let output = prop.parts[0];
-		for (let i = 0; i < start.length; i++) {
-			const value = start[i] - (start[i] - end[i]) * localTime;
-			output += Math.round(value * 1e4) / 1e4 + prop.units[i] + prop.parts[i + 1];
-		}
-		props[key] = output;
-	}
-	return {
-		precisePercentage,
-		normalizedTime,
-		props
-	};
 };
 /**
 * Calculates the props of an instance and executes its callbacks.
@@ -1443,7 +1462,7 @@ var createInstance = function(data, defer) {
 			_disable();
 			return;
 		}
-		_data = validate(resolved);
+		_data = validate(resolved, (value, elem) => relativeToAbsoluteValue(value, elem, getRawScrollTop(), getViewportHeight()));
 		_data.disabled = false;
 		animatedKeys = getAnimatedKeys(_data);
 		timelineMode = canUseTimeline(_data, animatedKeys);
@@ -1585,8 +1604,7 @@ var mount = function(options = {}) {
 	}
 	init = true;
 	settings = Object.assign({}, settings, { lenis: null }, options);
-	breakpointList = null;
-	mediaQueries.clear();
+	setBreakpoints(settings.breakpoints);
 	viewportWidth = getViewportWidth();
 	viewportHeight = null;
 	maxScrollTop = null;

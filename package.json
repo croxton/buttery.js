@@ -20,13 +20,21 @@
   "sideEffects": false,
   "scripts": {
     "build": "vite build && vite build --mode browser",
-    "demo": "vite --open /demo/"
+    "demo": "vite --open /demo/",
+    "test": "vitest",
+    "prepublishOnly": "npm run build && publint",
+    "test:browser": "vitest --config vitest.browser.config.js"
   },
   "dependencies": {
     "eases": "^1.0.8",
     "parse-unit": "^1.0.1"
   },
   "devDependencies": {
-    "vite": "^8.3.6"
+    "@vitest/browser-playwright": "^5.1.0",
+    "happy-dom": "^21.0.4",
+    "playwright": "^1.65.1",
+    "publint": "^0.3.25",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
   }
 }
