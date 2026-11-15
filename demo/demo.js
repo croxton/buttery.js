@@ -16,9 +16,12 @@
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><rect y="78" width="100" height="22" fill="${color}"/><path fill="${color}" d="${d}"/></svg>`
     return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
   }
-  $('.grass--back').style.backgroundImage = grassTile('#4f9a45', 9)
-  $('.grass--mid').style.backgroundImage = grassTile('#62b356', 7)
-  $('.grass--front').style.backgroundImage = grassTile('#79c96a', 6)
+  // This script is shared by every demo page, so skip whatever a page doesn't have
+  const grass = [['.grass--back', '#4f9a45', 9], ['.grass--mid', '#62b356', 7], ['.grass--front', '#79c96a', 6]]
+  grass.forEach(([selector, color, blades]) => {
+    const layer = $(selector)
+    if (layer) layer.style.backgroundImage = grassTile(color, blades)
+  })
 
   // ?js forces the JavaScript fallback, ?lenis smooth-scrolls with Lenis and drives every instance from it
   const params = new URLSearchParams(location.search)
@@ -33,7 +36,7 @@
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     badge.dataset.mode = 'off'
     status.textContent = 'Reduced motion: animations off'
-    $('.layers__front').style.opacity = 1
+    document.querySelectorAll('.layers__front, .band__title').forEach((el) => { el.style.opacity = 1 })
     return
   }
 
@@ -125,7 +128,8 @@
     ]
 
     const defaults = lenis ? { timeline: 'lenis' } : {}
-    const instances = configs.map((config) => buttery.create({ ...config, ...defaults }))
+    // Only the scenes this page has
+    const instances = configs.filter((config) => config.elem && config.direct).map((config) => buttery.create({ ...config, ...defaults }))
     instances.forEach((instance) => instance.start())
 
     // The clouds and the meadow are set up with data-buttery attributes in the HTML

@@ -1,0 +1,162 @@
+/* Seasons parallax demo. Loads after demo.css, which supplies the badge, `pre` and `.mover`. */
+
+html { background: #282e34; }
+body.seasons { background: #282e34; }
+
+/* Text panels between the bands */
+.season-desc {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-height: 80vh;
+  padding: 14vh 16px;
+  background: #282e34;
+  color: #eef2f6;
+}
+.season-desc__inner { width: 100%; max-width: 40rem; min-width: 0; }
+.season-desc h1,
+.season-desc h2 {
+  text-align: center;
+}
+.season-desc p { color: #b9c4cf; font-size: 1.05rem; line-height: 1.7; }
+.season-desc pre { margin: 1.5rem 0; border: 1px solid rgb(255 255 255 / 0.08); }
+.season-desc .small { font-size: 0.9rem; }
+.season-desc .hint,
+.season-desc .links { text-align: center; margin-top: 2rem; }
+.season-desc .back { margin-bottom: 2rem; }
+.season-desc a { color: #eef2f6; }
+.season-desc--intro { min-height: 100vh; min-height: 100svh; }
+
+/* A band is one screen tall and clips its layers */
+.band {
+  position: relative;
+  height: 100vh;
+  height: 100svh;
+  display: grid;
+  place-items: center;
+  overflow: clip;
+  background: var(--sky-b);
+}
+
+/* Each layer covers the band, so children are positioned against the band.
+   Hills and trees only need to cover what can be seen: with these ranges a
+   layer's top and bottom edges stay off screen whenever they've moved. */
+.band__layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The sky moves the furthest, so its gradient reaches well past the band */
+.band__sky::before {
+  content: "";
+  position: absolute;
+  inset: -60vh 0;
+  z-index: -1;
+  background: linear-gradient(to bottom, var(--sky-a) 27%, var(--sky-b) 73%);
+}
+
+.sun,
+.cloud,
+.tree,
+.pine,
+.band__particles svg {
+  position: absolute;
+  left: var(--x);
+  width: var(--w);
+}
+.sun,
+.cloud,
+.band__particles svg { top: var(--y); }
+/* Trees are placed by the middle of the trunk, so the spot on the hill under
+   the trunk doesn't change with the tree's width. --b is the hill height there. */
+.tree,
+.pine { bottom: var(--b); margin-left: calc(var(--w) / -2); }
+
+.sun {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--sun);
+  box-shadow: 0 0 60px 20px color-mix(in srgb, var(--sun) 45%, transparent);
+}
+.cloud { height: calc(var(--w) / 2); fill: var(--cloud, #fff); }
+.tree { aspect-ratio: 100 / 130; }
+.pine { aspect-ratio: 60 / 130; }
+
+.hills {
+  position: absolute;
+  left: -2%;
+  bottom: 0;
+  display: block;
+  width: 104%;
+}
+.hills--far  { height: 58%; }
+.hills--near { height: 34%; }
+
+/* Particles sit in front and spread over a tall layer, so some are always in view */
+.band__particles {
+  position: absolute;
+  inset: -60vh 0;
+  z-index: 4;
+  pointer-events: none;
+}
+.band__particles svg {
+  height: var(--w);
+  rotate: var(--r, 0deg);
+  fill: var(--c, var(--particle));
+}
+/* Snow travels further than the page scrolls, so its layer reaches further too */
+.band__particles--snow { inset: -125vh 0; }
+.band__particles .cloud { height: calc(var(--w) / 2); fill: var(--cloud, #fff); opacity: 0.85; }
+
+.band__title {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  margin: 0;
+  padding: 0 16px;
+  color: #fff;
+  font-size: clamp(3rem, 14vw, 7.5rem);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  text-align: center;
+  /* No backing band, so a soft shadow keeps it readable on the pale skies */
+  text-shadow: 0 2px 4px rgb(0 0 0 / 0.25), 0 4px 30px rgb(0 0 0 / 0.3);
+}
+
+/* Seasons */
+.band--spring {
+  --sky-a: #8fd0f5;
+  --sky-b: #e3f4ff;
+  --sun: #fff3b0;
+  --particle: #f6a9c1;
+  --leaf: #f4a7c0;
+  --leaf-hi: #fcd5e2;
+}
+.band--summer {
+  --sky-a: #2f8fe0;
+  --sky-b: #9ad6ff;
+  --sun: #ffd34d;
+}
+.band--autumn {
+  --sky-a: #e9925a;
+  --sky-b: #fde1b8;
+  --sun: #fff0c2;
+  --cloud: #fff1e2;
+}
+.band--winter {
+  --sky-a: #7f97b2;
+  --sky-b: #dbe5ef;
+  --sun: #f3f6fa;
+  --cloud: #eef3f8;
+  --particle: #fff;
+  --leaf: #2e5248;
+  --snow: #f4f8fb;
+}
+.band--winter .band__layer:not(.band__sky) .pine { --leaf: #24433b; }
+
+@media (max-width: 700px) {
+  .season-desc { min-height: 0; padding: 10vh 16px; }
+  .season-desc--intro { min-height: 100vh; min-height: 100svh; }
+}

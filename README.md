@@ -521,7 +521,48 @@ Vite builds `lib/buttery.js` twice (see `vite.config.js`):
 npm run demo
 ```
 
+A second page, `demo/parallax.html`, has four layered parallax bands set up entirely with `data-buttery` attributes.
+
 Add `?js` to the URL to force the JavaScript fallback, or `?lenis` to smooth-scroll with Lenis and drive every instance from it. Add `&synctouch` to also smooth touch scrolling with Lenis (`?lenis&synctouch`).
+
+### Tests
+
+Tests use [Vitest](https://vitest.dev) and live in `test/`.
+
+```bash
+npm test
+```
+
+Runs the unit and DOM tests in Node with [happy-dom](https://github.com/capricorn86/happy-dom) (`vitest.config.js`), in watch mode. No browser is needed. Use `npm test -- --run` for a single run (e.g. in CI). To run one file or the tests whose name matches some text:
+
+```bash
+npx vitest test/attributes.test.js
+npx vitest -t "max-md"
+```
+
+| File | Covers |
+|---|---|
+| `test/attributes.test.js` | Parsing `data-buttery*` attributes |
+| `test/values.test.js` | Prop values, ranges, validation and interpolation |
+| `test/breakpoints.test.js` | Breakpoint sorting, matching and overrides |
+| `test/buttery.test.js` | The public API: rendering on scroll, callbacks, `mount()`/`unmount()`, resize, breakpoint changes, Lenis, `scan()`/`release()` |
+
+#### Browser tests
+
+`test/browser/` runs in real Chromium and Firefox with Vitest browser mode and Playwright (`vitest.browser.config.js`). These check that the native timeline and the JavaScript fallback render the same values, and that breakpoints re-apply when the viewport is resized. Install the browsers once, then run the tests:
+
+```bash
+npx playwright install chromium firefox
+npm run test:browser
+```
+
+#### Before publishing
+
+`npm publish` runs `prepublishOnly` first. It builds `dist/` and checks the package with [publint](https://publint.dev). To run it yourself:
+
+```bash
+npm run prepublishOnly
+```
 
 ## Tips
 

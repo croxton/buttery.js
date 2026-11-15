@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Buttery.js seasons parallax</title>
+  <meta name="description" content="Layered parallax bands for the four seasons, set up with data-buttery attributes.">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="demo.css">
+  <link rel="stylesheet" href="parallax.css">
+</head>
+<body class="seasons">
+
+  <!-- Shapes shared by the scenes. Colours come from CSS custom properties. -->
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute">
+    <symbol id="cloud" viewBox="0 0 200 100">
+      <circle cx="60" cy="62" r="34"/>
+      <circle cx="100" cy="45" r="42"/>
+      <circle cx="145" cy="62" r="32"/>
+      <rect x="40" y="62" width="125" height="34" rx="17"/>
+    </symbol>
+    <symbol id="tree" viewBox="0 0 100 130">
+      <path fill="var(--trunk, #6b4a33)" d="M45 130L46 70L54 70L55 130Z M50 92L34 72L37 70L51 86Z"/>
+      <circle fill="var(--leaf)" cx="50" cy="44" r="32"/>
+      <circle fill="var(--leaf)" cx="28" cy="62" r="22"/>
+      <circle fill="var(--leaf)" cx="72" cy="60" r="24"/>
+      <circle fill="var(--leaf-hi)" cx="40" cy="34" r="14"/>
+      <circle fill="var(--leaf-hi)" cx="66" cy="46" r="9"/>
+      <circle fill="var(--leaf-hi)" cx="24" cy="58" r="7"/>
+    </symbol>
+    <symbol id="pine" viewBox="0 0 60 130">
+      <rect fill="var(--trunk, #4a3426)" x="26" y="100" width="8" height="30"/>
+      <path fill="var(--leaf)" d="M30 0L50 42H10Z M30 22L56 76H4Z M30 52L60 108H0Z"/>
+      <path fill="var(--snow, transparent)" d="M30 0L38 17L33 15L30 19L27 15L22 17Z M30 22L41 45L35 42L30 47L25 42L19 45Z M30 52L43 76L37 73L30 79L23 73L17 76Z"/>
+    </symbol>
+    <symbol id="petal" viewBox="0 0 20 20">
+      <path d="M10 1C16 6 16 14 10 19C4 14 4 6 10 1Z"/>
+    </symbol>
+    <symbol id="leaf" viewBox="0 0 20 20">
+      <path d="M2 18C2 8 8 2 18 2C18 12 12 18 2 18Z"/>
+      <path d="M2 18L13 7" stroke="rgb(0 0 0 / 0.25)" stroke-width="1.2" fill="none"/>
+    </symbol>
+    <symbol id="flake" viewBox="0 0 20 20">
+      <circle cx="10" cy="10" r="9"/>
+    </symbol>
+  </svg>
+
+  <nav class="badge" id="badge" aria-label="Rendering mode">
+    <div class="badge__links">
+      <a href="./parallax.html" data-choice="native">Native</a>
+      <a href="?js" data-choice="js">JS</a>
+      <a href="?lenis" data-choice="lenis">Lenis</a>
+      <a href="?lenis&amp;synctouch" data-choice="synctouch">Lenis touch</a>
+    </div>
+    <span class="badge__status">Checking…</span>
+  </nav>
+
+  <header class="season-desc season-desc--intro">
+    <div class="season-desc__inner">
+      <p class="back"><a href="./">← Back to the cows</a></p>
+      <h1>Seasons</h1>
+      <p>Four parallax bands, each built from layers that scroll at different speeds. There is no JavaScript setup on this page: every layer is a <code>data-buttery</code> attribute.</p>
+      <p class="hint">Scroll down ↓</p>
+    </div>
+  </header>
+
+  <!-- Spring -->
+  <section class="band band--spring" id="spring" aria-label="Spring">
+    <div class="band__layer band__sky mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #spring"
+         data-buttery-translate="0 -50vh | 0 50vh">
+      <div class="sun" style="--x:72%;--y:16%;--w:110px"></div>
+      <svg class="cloud" style="--x:10%;--y:14%;--w:180px"><use href="#cloud"/></svg>
+      <svg class="cloud" style="--x:48%;--y:30%;--w:120px"><use href="#cloud"/></svg>
+    </div>
+    <div class="band__layer mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #spring"
+         data-buttery-translate="0 -30vh | 0 30vh">
+      <svg class="hills hills--far" viewBox="0 0 1200 300" preserveAspectRatio="none">
+        <path fill="#a6d68f" d="M0 300L0 150C150 90 300 100 450 140C600 180 750 70 900 95C1050 120 1120 150 1200 130L1200 300Z"/>
+      </svg>
+      <svg class="tree" style="--x:65%;--b:37.2%;--w:70px"><use href="#tree"/></svg>
+      <svg class="tree" style="--x:82%;--b:35.7%;--w:55px"><use href="#tree"/></svg>
+    </div>
+    <div class="band__layer mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #spring"
+         data-buttery-translate="0 -10vh | 0 10vh">
+      <svg class="hills hills--near" viewBox="0 0 1200 300" preserveAspectRatio="none">
+        <path fill="#6cbf5a" d="M0 300L0 170C200 130 400 150 600 185C800 220 1000 140 1200 165L1200 300Z"/>
+      </svg>
+      <svg class="tree" style="--x:12%;--b:15.5%;--w:min(220px, 40vw)"><use href="#tree"/></svg>
+      <svg class="tree" style="--x:33%;--b:14.7%;--w:min(150px, 28vw)"><use href="#tree"/></svg>
+      <svg class="tree" style="--x:92%;--b:14.3%;--w:min(190px, 34vw)"><use href="#tree"/></svg>
+    </div>
+    <div class="band__particles mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #spring"
+         data-buttery-translate="-4vw 30vh | 4vw -50vh">
+      <svg style="--x:6%;--y:12%;--w:25px;--r:20deg"><use href="#petal"/></svg>
+      <svg style="--x:22%;--y:30%;--w:19px;--r:-40deg"><use href="#petal"/></svg>
+      <svg style="--x:38%;--y:18%;--w:28px;--r:70deg"><use href="#petal"/></svg>
+      <svg style="--x:55%;--y:42%;--w:22px;--r:10deg"><use href="#petal"/></svg>
+      <svg style="--x:71%;--y:24%;--w:32px;--r:-60deg"><use href="#petal"/></svg>
+      <svg style="--x:88%;--y:36%;--w:20px;--r:45deg"><use href="#petal"/></svg>
+      <svg style="--x:14%;--y:56%;--w:27px;--r:-15deg"><use href="#petal"/></svg>
+      <svg style="--x:46%;--y:64%;--w:19px;--r:80deg"><use href="#petal"/></svg>
+      <svg style="--x:79%;--y:58%;--w:25px;--r:-30deg"><use href="#petal"/></svg>
+      <svg style="--x:31%;--y:78%;--w:22px;--r:35deg"><use href="#petal"/></svg>
+      <svg style="--x:63%;--y:84%;--w:28px;--r:-75deg"><use href="#petal"/></svg>
+      <svg style="--x:93%;--y:72%;--w:19px;--r:5deg"><use href="#petal"/></svg>
+    </div>
+    <h2 class="band__title mover"
+        data-buttery="from: top-bottom; to: bottom-top; elem: #spring"
+        data-buttery-translate="0 20vh | 0 -20vh"
+        data-buttery-opacity="0 | 1 | 0">Spring</h2>
+  </section>
+
+  <section class="season-desc">
+    <div class="season-desc__inner">
+      <h2>Spring</h2>
+      <p>Petals let go before the leaves arrive. The sky lags at half your scroll speed, the far hills a little less, the blossom trees almost keep up with the page, and the petals overtake everything.</p>
+<pre><code>&lt;section class="band" id="spring"&gt;
+  &lt;div class="band__sky"
+    data-buttery="from: top-bottom; to: bottom-top; elem: #spring"
+    data-buttery-translate="0 -50vh | 0 50vh"&gt;…&lt;/div&gt;
+  &lt;div data-buttery="…"
+    data-buttery-translate="0 -30vh | 0 30vh"&gt;far hills&lt;/div&gt;
+  &lt;div data-buttery="…"
+    data-buttery-translate="0 -10vh | 0 10vh"&gt;trees&lt;/div&gt;
+  &lt;div data-buttery="…"
+    data-buttery-translate="-4vw 30vh | 4vw -50vh"&gt;petals&lt;/div&gt;
+&lt;/section&gt;</code></pre>
+      <p class="small">Every layer measures the band (<code>elem: #spring</code>), which never moves, so the ranges stay accurate however far a layer travels.</p>
+    </div>
+  </section>
+
+  <!-- Summer -->
+  <section class="band band--summer" id="summer" aria-label="Summer">
+    <div class="band__layer band__sky mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #summer"
+         data-buttery-translate="0 -50vh | 0 50vh">
+      <div class="sun" style="--x:18%;--y:12%;--w:170px"></div>
+      <svg class="cloud" style="--x:56%;--y:10%;--w:200px"><use href="#cloud"/></svg>
+      <svg class="cloud" style="--x:78%;--y:30%;--w:130px"><use href="#cloud"/></svg>
+    </div>
+    <div class="band__layer mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #summer"
+         data-buttery-translate="0 -30vh | 0 30vh">
+      <svg class="hills hills--far" viewBox="0 0 1200 300" preserveAspectRatio="none">
+        <path fill="#e9c46a" d="M0 300L0 160C200 120 380 130 560 150C760 170 950 110 1200 140L1200 300Z"/>
+        <path fill="#dcb04f" d="M0 300L0 220C300 190 600 210 900 200C1000 196 1100 200 1200 205L1200 300Z"/>
+      </svg>
+    </div>
+    <div class="band__layer mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #summer"
+         data-buttery-translate="0 -10vh | 0 10vh">
+      <svg class="hills hills--near" viewBox="0 0 1200 300" preserveAspectRatio="none">
+        <path fill="#c99a2e" d="M0 300L0 190C250 160 500 175 750 195C950 210 1100 185 1200 190L1200 300Z"/>
+      </svg>
+      <svg class="tree" style="--x:74%;--b:9.9%;--w:min(260px, 46vw);--leaf:#3f8f3a;--leaf-hi:#5aae4c"><use href="#tree"/></svg>
+    </div>
+    <div class="band__particles mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #summer"
+         data-buttery-translate="0 40vh | 0 -60vh">
+      <svg class="cloud" style="--x:-6%;--y:30%;--w:260px"><use href="#cloud"/></svg>
+      <svg class="cloud" style="--x:70%;--y:58%;--w:300px"><use href="#cloud"/></svg>
+    </div>
+    <h2 class="band__title mover"
+        data-buttery="from: top-bottom; to: bottom-top; elem: #summer"
+        data-buttery-translate="0 20vh | 0 -20vh"
+        data-buttery-opacity="0 | 1 | 0">Summer</h2>
+  </section>
+
+  <section class="season-desc">
+    <div class="season-desc__inner">
+      <h2>Summer</h2>
+      <p>Long light, short shadows. The further back a layer is, the more it lags behind the page. The near clouds go the other way: their range runs upwards, so they rush past faster than you scroll.</p>
+<pre><code>&lt;div class="band__particles"
+  data-buttery="from: top-bottom; to: bottom-top; elem: #summer"
+  data-buttery-translate="0 40vh | 0 -60vh"&gt;…&lt;/div&gt;</code></pre>
+    </div>
+  </section>
+
+  <!-- Autumn -->
+  <section class="band band--autumn" id="autumn" aria-label="Autumn">
+    <div class="band__layer band__sky mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #autumn"
+         data-buttery-translate="0 -50vh | 0 50vh">
+      <div class="sun" style="--x:44%;--y:34%;--w:140px"></div>
+      <svg class="cloud" style="--x:8%;--y:20%;--w:150px"><use href="#cloud"/></svg>
+    </div>
+    <div class="band__layer mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #autumn"
+         data-buttery-translate="0 -30vh | 0 30vh">
+      <svg class="hills hills--far" viewBox="0 0 1200 300" preserveAspectRatio="none">
+        <path fill="#c8794a" d="M0 300L0 130C180 90 320 150 500 120C700 90 820 160 1000 120C1100 100 1160 110 1200 115L1200 300Z"/>
+      </svg>
+      <svg class="tree" style="--x:22%;--b:32.6%;--w:60px;--leaf:#d9622b;--leaf-hi:#f08a3c"><use href="#tree"/></svg>
+      <svg class="tree" style="--x:54%;--b:34.6%;--w:50px;--leaf:#b8432a;--leaf-hi:#d9622b"><use href="#tree"/></svg>
+      <svg class="tree" style="--x:77%;--b:31%;--w:66px;--leaf:#e3a33a;--leaf-hi:#f4c25b"><use href="#tree"/></svg>
+    </div>
+    <div class="band__layer mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #autumn"
+         data-buttery-translate="0 -10vh | 0 10vh">
+      <svg class="hills hills--near" viewBox="0 0 1200 300" preserveAspectRatio="none">
+        <path fill="#8f4a2b" d="M0 300L0 180C220 150 420 200 640 185C860 170 1020 200 1200 175L1200 300Z"/>
+      </svg>
+      <svg class="tree" style="--x:6%;--b:13%;--w:min(240px, 44vw);--leaf:#c84b25;--leaf-hi:#ea7a34"><use href="#tree"/></svg>
+      <svg class="tree" style="--x:88%;--b:11.5%;--w:min(210px, 38vw);--leaf:#e09a2e;--leaf-hi:#f6c45a"><use href="#tree"/></svg>
+    </div>
+    <div class="band__particles band__particles--leaves mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #autumn"
+         data-buttery-translate="-4vw 30vh | 4vw -50vh"
+         data-buttery-translate-md="-12vw 50vh | 12vw -90vh">
+      <svg style="--x:8%;--y:16%;--w:35px;--r:30deg;--c:#d9622b"><use href="#leaf"/></svg>
+      <svg style="--x:26%;--y:34%;--w:28px;--r:-50deg;--c:#e3a33a"><use href="#leaf"/></svg>
+      <svg style="--x:42%;--y:14%;--w:38px;--r:110deg;--c:#b8432a"><use href="#leaf"/></svg>
+      <svg style="--x:58%;--y:40%;--w:32px;--r:-20deg;--c:#f08a3c"><use href="#leaf"/></svg>
+      <svg style="--x:74%;--y:22%;--w:41px;--r:70deg;--c:#c84b25"><use href="#leaf"/></svg>
+      <svg style="--x:90%;--y:46%;--w:28px;--r:-80deg;--c:#e09a2e"><use href="#leaf"/></svg>
+      <svg style="--x:16%;--y:62%;--w:38px;--r:15deg;--c:#b8432a"><use href="#leaf"/></svg>
+      <svg style="--x:50%;--y:70%;--w:32px;--r:140deg;--c:#e3a33a"><use href="#leaf"/></svg>
+      <svg style="--x:82%;--y:66%;--w:35px;--r:-35deg;--c:#d9622b"><use href="#leaf"/></svg>
+      <svg style="--x:34%;--y:84%;--w:28px;--r:55deg;--c:#f08a3c"><use href="#leaf"/></svg>
+    </div>
+    <h2 class="band__title mover"
+        data-buttery="from: top-bottom; to: bottom-top; elem: #autumn"
+        data-buttery-translate="0 20vh | 0 -20vh"
+        data-buttery-opacity="0 | 1 | 0">Autumn</h2>
+  </section>
+
+  <section class="season-desc">
+    <div class="season-desc__inner">
+      <h2>Autumn</h2>
+      <p>The petals are leaves now. Their layer has an <code>-md</code> override, so from the <code>md</code> breakpoint up they fall further and drift sideways more. Resize the window to see it switch.</p>
+<pre><code>&lt;div class="band__particles"
+  data-buttery="from: top-bottom; to: bottom-top; elem: #autumn"
+  data-buttery-translate="-4vw 30vh | 4vw -50vh"
+  data-buttery-translate-md="-12vw 50vh | 12vw -90vh"&gt;…&lt;/div&gt;</code></pre>
+    </div>
+  </section>
+
+  <!-- Winter -->
+  <section class="band band--winter" id="winter" aria-label="Winter">
+    <div class="band__layer band__sky mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #winter"
+         data-buttery-translate="0 -50vh | 0 50vh">
+      <div class="sun" style="--x:76%;--y:14%;--w:90px"></div>
+      <svg class="cloud" style="--x:14%;--y:16%;--w:170px"><use href="#cloud"/></svg>
+      <svg class="cloud" style="--x:50%;--y:26%;--w:110px"><use href="#cloud"/></svg>
+    </div>
+    <div class="band__layer mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #winter"
+         data-buttery-translate="0 -30vh | 0 30vh">
+      <svg class="hills hills--far hills--peaks" viewBox="0 0 1200 300" preserveAspectRatio="none">
+        <path fill="#8ea6bd" d="M0 300L0 170L120 110L200 160L310 50L420 170L520 120L600 160L720 40L840 170L930 130L1040 70L1130 150L1200 120L1200 300Z"/>
+        <path fill="#f4f8fb" d="M282 77L310 50L340 82L324 76L311 88L296 76Z M690 70L720 40L752 74L735 68L720 81L705 70Z M1012 98L1040 70L1070 99L1054 92L1040 103L1026 92Z"/>
+      </svg>
+      <svg class="pine" style="--x:13%;--b:28.8%;--w:34px"><use href="#pine"/></svg>
+      <svg class="pine" style="--x:19%;--b:33.7%;--w:28px"><use href="#pine"/></svg>
+      <svg class="pine" style="--x:67%;--b:32.8%;--w:32px"><use href="#pine"/></svg>
+      <svg class="pine" style="--x:73%;--b:25.8%;--w:38px"><use href="#pine"/></svg>
+    </div>
+    <div class="band__layer mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #winter"
+         data-buttery-translate="0 -10vh | 0 10vh">
+      <svg class="hills hills--near" viewBox="0 0 1200 300" preserveAspectRatio="none">
+        <path fill="#eef4f9" d="M0 300L0 185C200 160 420 195 640 180C860 165 1040 195 1200 175L1200 300Z"/>
+      </svg>
+      <svg class="pine" style="--x:6%;--b:12.4%;--w:min(110px, 22vw)"><use href="#pine"/></svg>
+      <svg class="pine" style="--x:19%;--b:12.5%;--w:min(80px, 16vw)"><use href="#pine"/></svg>
+      <svg class="pine" style="--x:86%;--b:11.9%;--w:min(120px, 24vw)"><use href="#pine"/></svg>
+    </div>
+    <div class="band__particles band__particles--snow mover" aria-hidden="true"
+         data-buttery="from: top-bottom; to: bottom-top; elem: #winter"
+         data-buttery-translate="-3vw -120vh | 3vw 120vh">
+      <svg style="--x:90%;--y:0.0%;--w:7px"><use href="#flake"/></svg>
+      <svg style="--x:72%;--y:2.9%;--w:8px"><use href="#flake"/></svg>
+      <svg style="--x:74%;--y:5.5%;--w:10px"><use href="#flake"/></svg>
+      <svg style="--x:68%;--y:8.4%;--w:9px"><use href="#flake"/></svg>
+      <svg style="--x:25%;--y:11.5%;--w:7px"><use href="#flake"/></svg>
+      <svg style="--x:69%;--y:13.6%;--w:5px"><use href="#flake"/></svg>
+      <svg style="--x:47%;--y:15.9%;--w:11px"><use href="#flake"/></svg>
+      <svg style="--x:14%;--y:18.6%;--w:8px"><use href="#flake"/></svg>
+      <svg style="--x:68%;--y:21.2%;--w:9px"><use href="#flake"/></svg>
+      <svg style="--x:90%;--y:22.8%;--w:11px"><use href="#flake"/></svg>
+      <svg style="--x:34%;--y:24.7%;--w:10px"><use href="#flake"/></svg>
+      <svg style="--x:17%;--y:27.0%;--w:7px"><use href="#flake"/></svg>
+      <svg style="--x:30%;--y:29.6%;--w:11px"><use href="#flake"/></svg>
+      <svg style="--x:72%;--y:32.3%;--w:11px"><use href="#flake"/></svg>
+      <svg style="--x:28%;--y:33.5%;--w:8px"><use href="#flake"/></svg>
+      <svg style="--x:42%;--y:36.9%;--w:6px"><use href="#flake"/></svg>
+      <svg style="--x:7%;--y:40.3%;--w:7px"><use href="#flake"/></svg>
+      <svg style="--x:66%;--y:41.3%;--w:11px"><use href="#flake"/></svg>
+      <svg style="--x:18%;--y:44.1%;--w:7px"><use href="#flake"/></svg>
+      <svg style="--x:37%;--y:45.9%;--w:7px"><use href="#flake"/></svg>
+      <svg style="--x:53%;--y:48.4%;--w:9px"><use href="#flake"/></svg>
+      <svg style="--x:89%;--y:50.6%;--w:8px"><use href="#flake"/></svg>
+      <svg style="--x:63%;--y:54.4%;--w:9px"><use href="#flake"/></svg>
+      <svg style="--x:50%;--y:56.0%;--w:9px"><use href="#flake"/></svg>
+      <svg style="--x:40%;--y:59.4%;--w:9px"><use href="#flake"/></svg>
+      <svg style="--x:58%;--y:60.1%;--w:7px"><use href="#flake"/></svg>
+      <svg style="--x:40%;--y:62.7%;--w:10px"><use href="#flake"/></svg>
+      <svg style="--x:13%;--y:66.4%;--w:10px"><use href="#flake"/></svg>
+      <svg style="--x:41%;--y:66.9%;--w:6px"><use href="#flake"/></svg>
+      <svg style="--x:98%;--y:69.2%;--w:6px"><use href="#flake"/></svg>
+      <svg style="--x:16%;--y:72.9%;--w:8px"><use href="#flake"/></svg>
+      <svg style="--x:15%;--y:75.2%;--w:11px"><use href="#flake"/></svg>
+      <svg style="--x:87%;--y:78.3%;--w:11px"><use href="#flake"/></svg>
+      <svg style="--x:75%;--y:80.7%;--w:6px"><use href="#flake"/></svg>
+      <svg style="--x:26%;--y:81.0%;--w:5px"><use href="#flake"/></svg>
+      <svg style="--x:61%;--y:83.3%;--w:6px"><use href="#flake"/></svg>
+      <svg style="--x:49%;--y:87.5%;--w:9px"><use href="#flake"/></svg>
+      <svg style="--x:87%;--y:88.7%;--w:6px"><use href="#flake"/></svg>
+      <svg style="--x:88%;--y:91.4%;--w:5px"><use href="#flake"/></svg>
+      <svg style="--x:2%;--y:94.0%;--w:11px"><use href="#flake"/></svg>
+      <svg style="--x:91%;--y:96.8%;--w:5px"><use href="#flake"/></svg>
+      <svg style="--x:20%;--y:99.8%;--w:11px"><use href="#flake"/></svg>
+    </div>
+    <h2 class="band__title mover"
+        data-buttery="from: top-bottom; to: bottom-top; elem: #winter"
+        data-buttery-translate="0 20vh | 0 -20vh"
+        data-buttery-opacity="0 | 1 | 0">Winter</h2>
+  </section>
+
+  <footer class="season-desc">
+    <div class="season-desc__inner">
+      <h2>Winter</h2>
+      <p>Snow on the pines, falling while you scroll down. The band takes 200vh of scrolling to pass, and the snow layer travels 240vh downwards in that time, so it moves down the screen instead of up. Each title rises against the scroll and fades in and out with a <code>via</code> value, so it's fully visible only when its band fills the screen.</p>
+<pre><code>&lt;h2 class="band__title"
+  data-buttery="from: top-bottom; to: bottom-top; elem: #winter"
+  data-buttery-translate="0 20vh | 0 -20vh"
+  data-buttery-opacity="0 | 1 | 0"&gt;Winter&lt;/h2&gt;</code></pre>
+      <p class="links"><a href="./">← Back to the cows</a> · <a href="https://github.com/croxton/buttery.js">View on GitHub</a></p>
+    </div>
+  </footer>
+
+  <script src="../dist/buttery.min.js"></script>
+  <script src="demo.js"></script>
+</body>
+</html>

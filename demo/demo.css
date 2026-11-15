@@ -152,7 +152,7 @@ pre {
 .rocket__cow {
   position: absolute;
   left: 50%;
-  top: 50%;
+  top: 30%;
   width: min(420px, 70vw);
   height: auto;
   margin: calc(min(420px, 70vw) / -2) 0 0 calc(min(420px, 70vw) / -2);
@@ -199,7 +199,7 @@ pre {
   text-align: center;
 }
 .meadow__content { position: relative; z-index: 9; max-width: 32rem; }
-.meadow__content p { color: var(--muted); }
+.meadow__content p { color: var(--muted); margin-top: 1rem; }
 
 /* Back to front: mountains, fields, then grass. Every layer reaches the bottom
    edge, so moving a layer down never leaves a gap. */
